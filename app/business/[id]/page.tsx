@@ -37,15 +37,33 @@ async function getUser() {
   }
 }
 
+async function getReviews(businessId: string) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const { data } = await supabase
+    .from("reviews")
+    .select("*")
+    .eq("business_id", businessId)
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+  return data || []
+}
+
 export default async function BusinessProfile({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const [biz, user] = await Promise.all([getBusiness(id), getUser()])
+  const [biz, user, reviews] = await Promise.all([getBusiness(id), getUser(), getReviews(id)])
   if (!biz) return <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>Business not found</div>
 
   const isBusinessOwner = user?.user_metadata?.account_type === "business"
   const lat = biz.latitude || 39.1031
   const lng = biz.longitude || -84.5120
-  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(biz.name + ' ' + biz.address + ' ' + biz.city)}`
+  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(biz.name + " " + biz.address + " " + biz.city)}`
+
+  const avgReviuRating = reviews.length > 0
+    ? (reviews.reduce((sum: number, r: any) => sum + r.stars, 0) / reviews.length).toFixed(1)
+    : null
 
   return (
     <main style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
@@ -75,13 +93,16 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            <span style={{ color: "#f59e0b", fontSize: "15px" }}>{"★".repeat(Math.round(biz.google_rating || 0))}</span>
-            <span style={{ fontSize: "14px", fontWeight: "700" }}>{biz.google_rating}</span>
-          </div>
-          <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#ddd" }} />
-          <div style={{ background: "#EEEDFE", color: "#3C3489", fontSize: "12px", fontWeight: "600", padding: "3px 10px", borderRadius: "20px" }}>Reviu score pending</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
+          {avgReviuRating ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <span style={{ color: "#f59e0b", fontSize: "15px" }}>{"★".repeat(Math.round(Number(avgReviuRating)))}</span>
+              <span style={{ fontSize: "14px", fontWeight: "700" }}>{avgReviuRating}</span>
+              <span style={{ fontSize: "12px", color: "#888" }}>Reviu ({reviews.length})</span>
+            </div>
+          ) : (
+            <div style={{ background: "#EEEDFE", color: "#3C3489", fontSize: "12px", fontWeight: "600", padding: "3px 10px", borderRadius: "20px" }}>No Reviu reviews yet</div>
+          )}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "8px", marginBottom: "16px" }}>
@@ -113,12 +134,49 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
 
       <div style={{ background: "white", padding: "1rem 1.25rem", marginBottom: "8px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-          <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em" }}>Reviu reviews</div>
-          <Link href="/post-review" style={{ fontSize: "12px", color: "#534AB7", fontWeight: "600", textDecoration: "none" }}>+ Write one</Link>
+          <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Reviu reviews {reviews.length > 0 && `(${reviews.length})`}
+          </div>
+          <Link href={`/post-review?business=${id}`} style={{ fontSize: "12px", color: "#534AB7", fontWeight: "600", textDecoration: "none" }}>+ Write one</Link>
         </div>
-        <div style={{ fontSize: "13px", color: "#aaa", textAlign: "center", padding: "2rem 0", background: "#f7f7f5", borderRadius: "12px" }}>
-          No reviews yet — be the first ✨
-        </div>
+
+        {reviews.length === 0 ? (
+          <div style={{ fontSize: "13px", color: "#aaa", textAlign: "center", padding: "2rem 0", background: "#f7f7f5", borderRadius: "12px" }}>
+            No reviews yet — be the first ✨
+          </div>
+        ) : (
+          reviews.map((review: any) => (
+            <div key={review.id} style={{ paddingBottom: "16px", marginBottom: "16px", borderBottom: "1px solid #f0f0f0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "700", color: "#534AB7", flexShrink: 0 }}>
+                    {review.reviewer_initials || "R"}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#111" }}>
+                      {review.reviewer_name || "Reviu Member"}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "#888" }}>
+                      {review.context_tag && `${review.context_tag} · `}
+                      {review.is_first_visit && "First visit · "}
+                      {new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "1px", flexShrink: 0 }}>
+                  {[1,2,3,4,5].map(s => (
+                    <span key={s} style={{ fontSize: "13px", color: s <= review.stars ? "#f59e0b" : "#ddd" }}>★</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.6" }}>{review.text}</div>
+            </div>
+          ))
+        )}
+
+        <Link href={`/post-review?business=${id}`} style={{ display: "block", background: "#534AB7", color: "white", padding: "12px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginTop: "8px" }}>
+          Write a review
+        </Link>
       </div>
 
       <div style={{ background: "white", padding: "1rem 1.25rem", marginBottom: "8px" }}>
