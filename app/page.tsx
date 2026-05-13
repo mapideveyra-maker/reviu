@@ -2,6 +2,7 @@
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { createClient } from "@supabase/supabase-js"
+import { useRouter } from "next/navigation"
 
 const categoryPhotos: Record<string, string> = {
   "Fine Dining": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80",
@@ -31,6 +32,7 @@ export default function Home() {
   const [activity, setActivity] = useState<Record<string, number>>({})
   const [activeFilter, setActiveFilter] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
     const supabase = createClient(
@@ -94,8 +96,25 @@ export default function Home() {
           paddingLeft: "1.25rem",
           paddingRight: "2.5rem",
           scrollbarWidth: "none",
-          msOverflowStyle: "none",
         } as any}>
+          <div
+            onClick={() => setActiveFilter(null)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 14px",
+              borderRadius: "20px",
+              background: activeFilter === null ? "#534AB7" : "white",
+              border: activeFilter === null ? "1px solid #534AB7" : "1px solid #e8e8e8",
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            <span style={{ fontSize: "12px", fontWeight: "600", color: activeFilter === null ? "white" : "#444" }}>All</span>
+          </div>
+
           {moodFilters.map(mood => (
             <div
               key={mood.label}
@@ -111,11 +130,13 @@ export default function Home() {
                 whiteSpace: "nowrap",
                 cursor: "pointer",
                 flexShrink: 0,
-                transition: "all 0.15s",
               }}
             >
               <span style={{ fontSize: "14px" }}>{mood.icon}</span>
               <span style={{ fontSize: "12px", fontWeight: "500", color: activeFilter === mood.label ? "white" : "#444" }}>{mood.label}</span>
+              {activeFilter === mood.label && (
+                <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)", marginLeft: "2px" }}>✕</span>
+              )}
             </div>
           ))}
         </div>
@@ -127,13 +148,7 @@ export default function Home() {
           width: "48px",
           background: "linear-gradient(to right, rgba(247,247,245,0), rgba(247,247,245,1))",
           pointerEvents: "none",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          paddingRight: "8px",
-        }}>
-          <span style={{ fontSize: "16px", color: "#aaa" }}>›</span>
-        </div>
+        }} />
       </div>
 
       {specials.length > 0 && !activeFilter && (
@@ -214,12 +229,14 @@ export default function Home() {
 
       <div style={{ padding: "1.25rem 1.25rem 0" }}>
         <div style={{ fontSize: "11px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
-          {activeFilter ? `All ${activeFilter} spots` : "All businesses"}
+          {activeFilter ? `${activeFilter} spots` : "All businesses"}
         </div>
 
         {filteredBusinesses.length === 0 && (
-          <div style={{ textAlign: "center", padding: "2rem", color: "#888", fontSize: "14px" }}>
-            No businesses found for this filter yet
+          <div style={{ textAlign: "center", padding: "2rem", background: "white", borderRadius: "16px" }}>
+            <div style={{ fontSize: "32px", marginBottom: "8px" }}>🔍</div>
+            <div style={{ fontSize: "14px", color: "#888" }}>No businesses found for this vibe yet</div>
+            <div onClick={() => setActiveFilter(null)} style={{ fontSize: "13px", color: "#534AB7", fontWeight: "600", marginTop: "12px", cursor: "pointer" }}>Show all businesses</div>
           </div>
         )}
 
@@ -256,10 +273,10 @@ export default function Home() {
       </div>
 
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
-        <Link href="/" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
+        <div onClick={() => { setActiveFilter(null); window.scrollTo(0, 0) }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", cursor: "pointer" }}>
           <span style={{ fontSize: "20px" }}>⊞</span>
           <span style={{ fontSize: "11px", color: "#534AB7", fontWeight: "600" }}>Home</span>
-        </Link>
+        </div>
         <Link href="/post-review" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
           <span style={{ fontSize: "20px" }}>⊕</span>
           <span style={{ fontSize: "11px", color: "#888" }}>Review</span>
