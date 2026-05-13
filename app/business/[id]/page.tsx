@@ -56,7 +56,7 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
   const [biz, user, reviews] = await Promise.all([getBusiness(id), getUser(), getReviews(id)])
   if (!biz) return <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>Business not found</div>
 
-  const isBusinessOwner = user?.user_metadata?.account_type === "business"
+  const isBusinessOwner = user?.user_metadata?.account_type === "business" && user?.id === biz.owner_id
   const lat = biz.latitude || 39.1031
   const lng = biz.longitude || -84.5120
   const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(biz.name + " " + biz.address + " " + biz.city)}`
@@ -132,6 +132,32 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
         )}
       </div>
 
+      {biz.special_today && (
+        <div style={{ background: "white", padding: "1rem 1.25rem", marginBottom: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+            <span style={{ fontSize: "11px", fontWeight: "700", color: "#534AB7", background: "#EEEDFE", padding: "3px 10px", borderRadius: "20px" }}>✨ SPECIAL TODAY</span>
+          </div>
+          {biz.special_media_url && (
+            <div style={{ borderRadius: "12px", overflow: "hidden", marginBottom: "10px" }}>
+              {biz.special_media_type === "video" ? (
+                <video
+                  src={biz.special_media_url}
+                  controls
+                  style={{ width: "100%", borderRadius: "12px", maxHeight: "240px" }}
+                />
+              ) : (
+                <img
+                  src={biz.special_media_url}
+                  alt="Today's special"
+                  style={{ width: "100%", borderRadius: "12px", objectFit: "cover", maxHeight: "240px" }}
+                />
+              )}
+            </div>
+          )}
+          <div style={{ fontSize: "14px", color: "#333", lineHeight: "1.6" }}>{biz.special_today}</div>
+        </div>
+      )}
+
       <div style={{ background: "white", padding: "1rem 1.25rem", marginBottom: "8px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
           <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em" }}>
@@ -170,6 +196,12 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
                 </div>
               </div>
               <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.6" }}>{review.text}</div>
+              {review.business_response && (
+                <div style={{ background: "#EEEDFE", borderRadius: "10px", padding: "10px 12px", marginTop: "10px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: "600", color: "#534AB7", marginBottom: "4px" }}>Response from {biz.name}</div>
+                  <div style={{ fontSize: "13px", color: "#3C3489", lineHeight: "1.5" }}>{review.business_response}</div>
+                </div>
+              )}
             </div>
           ))
         )}
