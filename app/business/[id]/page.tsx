@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { createClient } from "@supabase/supabase-js"
+import { cookies } from "next/headers"
 
 async function getBusiness(id: string) {
   const supabase = createClient(
@@ -15,18 +16,39 @@ async function getBusiness(id: string) {
   return data
 }
 
+async function getUser() {
+  try {
+    const { createServerClient } = await import("@supabase/ssr")
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll() },
+          setAll() {},
+        },
+      }
+    )
+    const { data } = await supabase.auth.getUser()
+    return data.user
+  } catch {
+    return null
+  }
+}
+
 export default async function BusinessProfile({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const biz = await getBusiness(id)
+  const [biz, user] = await Promise.all([getBusiness(id), getUser()])
   if (!biz) return <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>Business not found</div>
 
+  const isBusinessOwner = user?.user_metadata?.account_type === "business"
   const lat = biz.latitude || 39.1031
   const lng = biz.longitude || -84.5120
   const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(biz.name + ' ' + biz.address + ' ' + biz.city)}`
 
   return (
     <main style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
-
       <div style={{ position: "relative", height: "260px", background: "#e8e8e8" }}>
         <iframe
           src={`https://maps.google.com/maps?q=${lat},${lng}&z=16&output=embed`}
@@ -36,9 +58,7 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
           loading="lazy"
         />
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.5) 100%)", pointerEvents: "none" }} />
-
         <Link href="/" style={{ position: "absolute", top: "16px", left: "16px", width: "36px", height: "36px", background: "white", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", fontSize: "16px", boxShadow: "0 2px 8px rgba(0,0,0,0.2)", zIndex: 20 }}>←</Link>
-
         <div style={{ position: "absolute", bottom: "-36px", left: "20px", width: "72px", height: "72px", borderRadius: "50%", background: "#534AB7", border: "4px solid white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", fontWeight: "700", color: "white", boxShadow: "0 4px 16px rgba(0,0,0,0.2)", zIndex: 20 }}>
           {biz.name.slice(0, 2).toUpperCase()}
         </div>
@@ -116,11 +136,21 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
         </div>
       </div>
 
-      <div style={{ padding: "0 1rem" }}>
-        <Link href="/claim-business" style={{ display: "block", background: "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginBottom: "8px" }}>
-          {biz.claimed ? "Manage this business" : "Claim this business — it's free"}
-        </Link>
-      </div>
+      {isBusinessOwner && !biz.claimed && (
+        <div style={{ padding: "0 1rem" }}>
+          <Link href="/claim-business" style={{ display: "block", background: "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginBottom: "8px" }}>
+            Claim this business — it is free
+          </Link>
+        </div>
+      )}
+
+      {isBusinessOwner && biz.claimed && (
+        <div style={{ padding: "0 1rem" }}>
+          <Link href="/business-dashboard" style={{ display: "block", background: "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginBottom: "8px" }}>
+            Manage this business
+          </Link>
+        </div>
+      )}
 
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
         <Link href="/" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊞</span><span style={{ fontSize: "11px", color: "#888" }}>Home</span></Link>
