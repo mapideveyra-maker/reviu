@@ -51,6 +51,15 @@ async function getReviews(businessId: string) {
   return data || []
 }
 
+function hexToRgb(hex: string) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : { r: 83, g: 74, b: 183 }
+}
+
 export default async function BusinessProfile({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const [biz, user, reviews] = await Promise.all([getBusiness(id), getUser(), getReviews(id)])
@@ -60,48 +69,74 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
   const lat = biz.latitude || 39.1031
   const lng = biz.longitude || -84.5120
   const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(biz.name + " " + biz.address + " " + biz.city)}`
+  const accent = biz.brand_color || "#534AB7"
+  const rgb = hexToRgb(accent)
+  const accentLight = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.06)`
+  const accentMedium = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.12)`
+  const accentBorder = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.2)`
 
   const avgReviuRating = reviews.length > 0
     ? (reviews.reduce((sum: number, r: any) => sum + r.stars, 0) / reviews.length).toFixed(1)
     : null
 
   return (
-    <main style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
-      <div style={{ position: "relative", height: "260px", background: "#e8e8e8" }}>
-        <iframe
-          src={`https://maps.google.com/maps?q=${lat},${lng}&z=16&output=embed`}
-          width="100%"
-          height="100%"
-          style={{ border: "none", filter: "saturate(1.1)", display: "block" }}
-          loading="lazy"
-        />
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.5) 100%)", pointerEvents: "none" }} />
-        <Link href="/" style={{ position: "absolute", top: "16px", left: "16px", width: "36px", height: "36px", background: "white", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", fontSize: "16px", boxShadow: "0 2px 8px rgba(0,0,0,0.2)", zIndex: 20 }}>←</Link>
-        <div style={{ position: "absolute", bottom: "-36px", left: "20px", width: "72px", height: "72px", borderRadius: "50%", background: "#534AB7", border: "4px solid white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", fontWeight: "700", color: "white", boxShadow: "0 4px 16px rgba(0,0,0,0.2)", zIndex: 20 }}>
-          {biz.name.slice(0, 2).toUpperCase()}
+    <main style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: accentLight, paddingBottom: "80px" }}>
+
+      {biz.music_url && (
+        <audio autoPlay loop style={{ display: "none" }}>
+          <source src={biz.music_url} />
+        </audio>
+      )}
+
+      <div style={{ position: "relative", marginBottom: "0" }}>
+        <div style={{ height: "260px", position: "relative" }}>
+          <iframe
+            src={`https://maps.google.com/maps?q=${lat},${lng}&z=16&output=embed`}
+            width="100%"
+            height="100%"
+            style={{ border: "none", filter: "saturate(1.1)", display: "block" }}
+            loading="lazy"
+          />
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.5) 100%)", pointerEvents: "none" }} />
+          <Link href="/" style={{ position: "absolute", top: "16px", left: "16px", width: "36px", height: "36px", background: "white", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", fontSize: "16px", boxShadow: "0 2px 8px rgba(0,0,0,0.2)", zIndex: 20 }}>←</Link>
+          {biz.music_url && (
+            <div style={{ position: "absolute", top: "16px", right: "16px", background: "rgba(0,0,0,0.4)", color: "white", fontSize: "11px", padding: "4px 10px", borderRadius: "20px", zIndex: 20 }}>
+              🎵 {biz.music_title || "Now playing"}
+            </div>
+          )}
+        </div>
+        <div style={{ position: "absolute", bottom: "-44px", left: "20px", width: "88px", height: "88px", borderRadius: "50%", background: accent, border: "5px solid white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "26px", fontWeight: "700", color: "white", boxShadow: "0 6px 20px rgba(0,0,0,0.2)", zIndex: 30, overflow: "hidden" }}>
+          {biz.logo_url ? (
+            <img src={biz.logo_url} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            biz.name.slice(0, 2).toUpperCase()
+          )}
         </div>
       </div>
 
-      <div style={{ background: "white", padding: "56px 1.25rem 1.25rem", marginBottom: "8px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+      <div style={{ background: "white", padding: "56px 1.25rem 1.25rem", marginBottom: "8px", borderBottom: `3px solid ${accent}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "20px", fontWeight: "700", marginBottom: "2px" }}>{biz.name}</div>
-            <div style={{ fontSize: "13px", color: "#888", marginBottom: "8px" }}>{biz.category} · {biz.city}, {biz.state}</div>
+            <div style={{ fontSize: "21px", fontWeight: "700", marginBottom: "2px", color: "#111" }}>{biz.name}</div>
+            {biz.tagline && (
+              <div style={{ fontSize: "13px", color: accent, fontWeight: "500", marginBottom: "4px", fontStyle: "italic" }}>{biz.tagline}</div>
+            )}
+            <div style={{ fontSize: "12px", color: "#888", marginBottom: "10px" }}>{biz.category} · {biz.city}, {biz.state}</div>
           </div>
           <div style={{ background: biz.claimed ? "#EAF3DE" : "#FAEEDA", color: biz.claimed ? "#3B6D11" : "#854F0B", fontSize: "11px", fontWeight: "700", padding: "4px 10px", borderRadius: "20px", flexShrink: 0, marginLeft: "8px" }}>
             {biz.claimed ? "✓ Verified" : "Unclaimed"}
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
           {avgReviuRating ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <span style={{ color: "#f59e0b", fontSize: "15px" }}>{"★".repeat(Math.round(Number(avgReviuRating)))}</span>
-              <span style={{ fontSize: "14px", fontWeight: "700" }}>{avgReviuRating}</span>
-              <span style={{ fontSize: "12px", color: "#888" }}>Reviu ({reviews.length})</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px", background: accentMedium, padding: "5px 12px", borderRadius: "20px", border: `1px solid ${accentBorder}` }}>
+              <span style={{ color: "#f59e0b", fontSize: "14px" }}>{"★".repeat(Math.round(Number(avgReviuRating)))}</span>
+              <span style={{ fontSize: "13px", fontWeight: "700", color: accent }}>{avgReviuRating}</span>
+              <span style={{ fontSize: "11px", color: "#888" }}>Reviu ({reviews.length})</span>
             </div>
           ) : (
-            <div style={{ background: "#EEEDFE", color: "#3C3489", fontSize: "12px", fontWeight: "600", padding: "3px 10px", borderRadius: "20px" }}>No Reviu reviews yet</div>
+            <div style={{ background: accentLight, color: accent, fontSize: "12px", fontWeight: "600", padding: "5px 12px", borderRadius: "20px", border: `1px solid ${accentBorder}` }}>No Reviu reviews yet</div>
           )}
         </div>
 
@@ -112,45 +147,48 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
             { icon: "🌐", label: "Website", href: biz.website ? `https://${biz.website}` : "#" },
             { icon: "📅", label: "Reserve", href: biz.booking_url || "#" },
           ].map(action => (
-            <a key={action.label} href={action.href} target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "10px 6px", background: "#f7f7f5", borderRadius: "12px", textDecoration: "none" }}>
+            <a key={action.label} href={action.href} target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "10px 6px", background: accentMedium, borderRadius: "12px", textDecoration: "none", border: `1px solid ${accentBorder}` }}>
               <span style={{ fontSize: "20px" }}>{action.icon}</span>
-              <span style={{ fontSize: "11px", color: "#555", fontWeight: "500" }}>{action.label}</span>
+              <span style={{ fontSize: "11px", color: accent, fontWeight: "600" }}>{action.label}</span>
             </a>
           ))}
         </div>
 
         {biz.address && (
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#666", paddingTop: "12px", borderTop: "1px solid #f0f0f0", marginBottom: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#666", paddingTop: "12px", borderTop: `1px solid ${accentBorder}`, marginBottom: "6px" }}>
             <span>📍</span><span>{biz.address}, {biz.city}, {biz.state}</span>
           </div>
         )}
 
         {biz.description && (
-          <div style={{ fontSize: "13px", color: "#666", lineHeight: "1.6", paddingTop: "10px", borderTop: "1px solid #f0f0f0" }}>
+          <div style={{ fontSize: "13px", color: "#666", lineHeight: "1.6", paddingTop: "10px", borderTop: `1px solid ${accentBorder}`, marginTop: "6px" }}>
             {biz.description}
           </div>
         )}
       </div>
 
+      {(biz.gallery_urls || []).length > 0 && (
+        <div style={{ background: "white", padding: "1rem 0 1rem 1.25rem", marginBottom: "8px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px", paddingRight: "1.25rem" }}>Photos</div>
+          <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingRight: "1.25rem", paddingBottom: "4px" }}>
+            {(biz.gallery_urls || []).map((url: string, i: number) => (
+              <img key={i} src={url} alt={`${biz.name} photo ${i + 1}`} style={{ width: "140px", height: "100px", objectFit: "cover", borderRadius: "12px", flexShrink: 0 }} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {biz.special_today && (
-        <div style={{ background: "white", padding: "1rem 1.25rem", marginBottom: "8px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-            <span style={{ fontSize: "11px", fontWeight: "700", color: "#534AB7", background: "#EEEDFE", padding: "3px 10px", borderRadius: "20px" }}>✨ SPECIAL TODAY</span>
+        <div style={{ background: "white", padding: "1rem 1.25rem", marginBottom: "8px", borderLeft: `4px solid ${accent}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+            <span style={{ fontSize: "11px", fontWeight: "700", color: accent, background: accentMedium, padding: "3px 10px", borderRadius: "20px", border: `1px solid ${accentBorder}` }}>✨ SPECIAL TODAY</span>
           </div>
           {biz.special_media_url && (
             <div style={{ borderRadius: "12px", overflow: "hidden", marginBottom: "10px" }}>
               {biz.special_media_type === "video" ? (
-                <video
-                  src={biz.special_media_url}
-                  controls
-                  style={{ width: "100%", borderRadius: "12px", maxHeight: "240px" }}
-                />
+                <video src={biz.special_media_url} controls style={{ width: "100%", borderRadius: "12px", maxHeight: "240px" }} />
               ) : (
-                <img
-                  src={biz.special_media_url}
-                  alt="Today's special"
-                  style={{ width: "100%", borderRadius: "12px", objectFit: "cover", maxHeight: "240px" }}
-                />
+                <img src={biz.special_media_url} alt="Today's special" style={{ width: "100%", borderRadius: "12px", objectFit: "cover", maxHeight: "240px" }} />
               )}
             </div>
           )}
@@ -163,25 +201,23 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
           <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Reviu reviews {reviews.length > 0 && `(${reviews.length})`}
           </div>
-          <Link href={`/post-review?business=${id}`} style={{ fontSize: "12px", color: "#534AB7", fontWeight: "600", textDecoration: "none" }}>+ Write one</Link>
+          <Link href={`/post-review?business=${id}`} style={{ fontSize: "12px", color: accent, fontWeight: "600", textDecoration: "none" }}>+ Write one</Link>
         </div>
 
         {reviews.length === 0 ? (
-          <div style={{ fontSize: "13px", color: "#aaa", textAlign: "center", padding: "2rem 0", background: "#f7f7f5", borderRadius: "12px" }}>
+          <div style={{ fontSize: "13px", color: "#aaa", textAlign: "center", padding: "2rem 0", background: accentLight, borderRadius: "12px", border: `1px solid ${accentBorder}` }}>
             No reviews yet — be the first ✨
           </div>
         ) : (
           reviews.map((review: any) => (
-            <div key={review.id} style={{ paddingBottom: "16px", marginBottom: "16px", borderBottom: "1px solid #f0f0f0" }}>
+            <div key={review.id} style={{ paddingBottom: "16px", marginBottom: "16px", borderBottom: `1px solid ${accentBorder}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "700", color: "#534AB7", flexShrink: 0 }}>
+                  <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: accentMedium, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "700", color: accent, flexShrink: 0, border: `1px solid ${accentBorder}` }}>
                     {review.reviewer_initials || "R"}
                   </div>
                   <div>
-                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#111" }}>
-                      {review.reviewer_name || "Reviu Member"}
-                    </div>
+                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#111" }}>{review.reviewer_name || "Reviu Member"}</div>
                     <div style={{ fontSize: "11px", color: "#888" }}>
                       {review.context_tag && `${review.context_tag} · `}
                       {review.is_first_visit && "First visit · "}
@@ -197,16 +233,16 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
               </div>
               <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.6" }}>{review.text}</div>
               {review.business_response && (
-                <div style={{ background: "#EEEDFE", borderRadius: "10px", padding: "10px 12px", marginTop: "10px" }}>
-                  <div style={{ fontSize: "11px", fontWeight: "600", color: "#534AB7", marginBottom: "4px" }}>Response from {biz.name}</div>
-                  <div style={{ fontSize: "13px", color: "#3C3489", lineHeight: "1.5" }}>{review.business_response}</div>
+                <div style={{ background: accentLight, borderRadius: "10px", padding: "10px 12px", marginTop: "10px", border: `1px solid ${accentBorder}` }}>
+                  <div style={{ fontSize: "11px", fontWeight: "600", color: accent, marginBottom: "4px" }}>Response from {biz.name}</div>
+                  <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.5" }}>{review.business_response}</div>
                 </div>
               )}
             </div>
           ))
         )}
 
-        <Link href={`/post-review?business=${id}`} style={{ display: "block", background: "#534AB7", color: "white", padding: "12px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginTop: "8px" }}>
+        <Link href={`/post-review?business=${id}`} style={{ display: "block", background: accent, color: "white", padding: "12px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginTop: "8px" }}>
           Write a review
         </Link>
       </div>
@@ -218,7 +254,7 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
             { label: "Google", value: `${biz.google_rating} ★` },
             { label: "Yelp", value: biz.yelp_rating ? `${biz.yelp_rating} ★` : "N/A" },
           ].map(stat => (
-            <div key={stat.label} style={{ flex: 1, background: "#f7f7f5", borderRadius: "10px", padding: "10px", textAlign: "center" }}>
+            <div key={stat.label} style={{ flex: 1, background: accentLight, borderRadius: "10px", padding: "10px", textAlign: "center", border: `1px solid ${accentBorder}` }}>
               <div style={{ fontSize: "11px", color: "#888", marginBottom: "2px" }}>{stat.label}</div>
               <div style={{ fontSize: "15px", fontWeight: "700" }}>{stat.value}</div>
             </div>
@@ -226,23 +262,15 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
         </div>
       </div>
 
-      {isBusinessOwner && !biz.claimed && (
-        <div style={{ padding: "0 1rem" }}>
-          <Link href="/claim-business" style={{ display: "block", background: "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginBottom: "8px" }}>
-            Claim this business — it is free
-          </Link>
-        </div>
-      )}
-
       {isBusinessOwner && biz.claimed && (
-        <div style={{ padding: "0 1rem" }}>
-          <Link href="/business-dashboard" style={{ display: "block", background: "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginBottom: "8px" }}>
+        <div style={{ padding: "0 1rem 1rem" }}>
+          <Link href="/business-dashboard" style={{ display: "block", background: accent, color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", textDecoration: "none" }}>
             Manage this business
           </Link>
         </div>
       )}
 
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
+      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: `2px solid ${accent}`, display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
         <Link href="/" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊞</span><span style={{ fontSize: "11px", color: "#888" }}>Home</span></Link>
         <Link href="/post-review" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊕</span><span style={{ fontSize: "11px", color: "#888" }}>Review</span></Link>
         <Link href="/influencers" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>✦</span><span style={{ fontSize: "11px", color: "#888" }}>Influencers</span></Link>

@@ -9,6 +9,7 @@ export default function BusinessDashboard() {
   const [business, setBusiness] = useState<any>(null)
   const [reviews, setReviews] = useState<any[]>([])
   const [reels, setReels] = useState<any[]>([])
+  const [followers, setFollowers] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("overview")
   const [specialText, setSpecialText] = useState("")
@@ -25,7 +26,17 @@ export default function BusinessDashboard() {
   const [reelType, setReelType] = useState("daily")
   const [savingReel, setSavingReel] = useState(false)
   const [reelSaved, setReelSaved] = useState(false)
+  const [brandColor, setBrandColor] = useState("#534AB7")
+  const [tagline, setTagline] = useState("")
+  const [musicUrl, setMusicUrl] = useState("")
+  const [musicTitle, setMusicTitle] = useState("")
+  const [savingBrand, setSavingBrand] = useState(false)
+  const [brandSaved, setBrandSaved] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [uploadingGallery, setUploadingGallery] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -50,46 +61,107 @@ export default function BusinessDashboard() {
         setSpecialText(bizData.special_today || "")
         setSpecialMediaUrl(bizData.special_media_url || "")
         setSpecialMediaType(bizData.special_media_type || "")
+        setBrandColor(bizData.brand_color || "#534AB7")
+        setTagline(bizData.tagline || "")
+        setMusicUrl(bizData.music_url || "")
+        setMusicTitle(bizData.music_title || "")
 
-        const [reviewRes, reelRes] = await Promise.all([
+        const [reviewRes, reelRes, followRes] = await Promise.all([
           supabase.from("reviews").select("*").eq("business_id", bizData.id).order("created_at", { ascending: false }),
           supabase.from("reels").select("*").eq("business_id", bizData.id).order("created_at", { ascending: false }),
+          supabase.from("follows").select("id", { count: "exact" }).eq("business_id", bizData.id),
         ])
         setReviews(reviewRes.data || [])
         setReels(reelRes.data || [])
+        setFollowers(followRes.count || 0)
       }
       setLoading(false)
     })
   }, [])
 
+  async function uploadFile(file: File, folder: string) {
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    const ext = file.name.split(".").pop()
+    const fileName = `${folder}/${business.id}-${Date.now()}.${ext}`
+    const { data, error } = await supabase.storage.from("reviu-media").upload(fileName, file, { upsert: true })
+    if (error) return null
+    const { data: urlData } = supabase.storage.from("reviu-media").getPublicUrl(fileName)
+    return urlData.publicUrl
+  }
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingLogo(true)
+    const url = await uploadFile(file, "logos")
+    if (url) {
+      const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+      await supabase.from("businesses").update({ logo_url: url }).eq("id", business.id)
+      setBusiness((prev: any) => ({ ...prev, logo_url: url }))
+    }
+    setUploadingLogo(false)
+  }
+
+  async function removeLogo() {
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    await supabase.from("businesses").update({ logo_url: null }).eq("id", business.id)
+    setBusiness((prev: any) => ({ ...prev, logo_url: null }))
+  }
+
+  async function handleGalleryUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    setUploadingGallery(true)
+    const urls = await Promise.all(files.map(f => uploadFile(f, "gallery")))
+    const validUrls = urls.filter(Boolean) as string[]
+    if (validUrls.length) {
+      const newGallery = [...(business.gallery_urls || []), ...validUrls].slice(0, 8)
+      const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+      await supabase.from("businesses").update({ gallery_urls: newGallery }).eq("id", business.id)
+      setBusiness((prev: any) => ({ ...prev, gallery_urls: newGallery }))
+    }
+    setUploadingGallery(false)
+  }
+
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file || !business) return
+    if (!file) return
     setUploadingMedia(true)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    const ext = file.name.split(".").pop()
-    const fileName = `specials/${business.id}-${Date.now()}.${ext}`
-    const { data, error } = await supabase.storage
-      .from("reviu-media")
-      .upload(fileName, file, { upsert: true })
-    if (!error && data) {
-      const { data: urlData } = supabase.storage.from("reviu-media").getPublicUrl(fileName)
-      setSpecialMediaUrl(urlData.publicUrl)
+    const url = await uploadFile(file, "specials")
+    if (url) {
+      setSpecialMediaUrl(url)
       setSpecialMediaType(file.type.startsWith("video") ? "video" : "image")
     }
     setUploadingMedia(false)
   }
 
+  async function saveBrand() {
+    if (!business) return
+    setSavingBrand(true)
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    await supabase.from("businesses").update({
+      brand_color: brandColor,
+      tagline,
+      music_url: musicUrl || null,
+      music_title: musicTitle || null,
+    }).eq("id", business.id)
+    setBusiness((prev: any) => ({ ...prev, brand_color: brandColor, tagline, music_url: musicUrl, music_title: musicTitle }))
+    setSavingBrand(false)
+    setBrandSaved(true)
+    setTimeout(() => setBrandSaved(false), 3000)
+  }
+
+  async function removeGalleryPhoto(url: string) {
+    const newGallery = (business.gallery_urls || []).filter((u: string) => u !== url)
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    await supabase.from("businesses").update({ gallery_urls: newGallery }).eq("id", business.id)
+    setBusiness((prev: any) => ({ ...prev, gallery_urls: newGallery }))
+  }
+
   async function saveSpecial() {
     if (!business) return
     setSavingSpecial(true)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
     await supabase.from("businesses").update({
       special_today: specialText || null,
       special_media_url: specialMediaUrl || null,
@@ -103,10 +175,7 @@ export default function BusinessDashboard() {
 
   async function saveResponse(reviewId: string) {
     setSavingResponse(reviewId)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
     await supabase.from("reviews").update({
       business_response: responseText[reviewId],
       business_response_at: new Date().toISOString(),
@@ -118,10 +187,7 @@ export default function BusinessDashboard() {
   async function postReel() {
     if (!reelTitle || !reelUrl) return
     setSavingReel(true)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
     const expires = reelType === "daily" ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null
     const { data } = await supabase.from("reels").insert({
       business_id: business.id,
@@ -159,25 +225,20 @@ export default function BusinessDashboard() {
       <div style={{ padding: "3rem 1.25rem", textAlign: "center" }}>
         <div style={{ fontSize: "48px", marginBottom: "16px" }}>🏪</div>
         <div style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>No claimed business yet</div>
-        <div style={{ fontSize: "14px", color: "#888", marginBottom: "24px", lineHeight: "1.6" }}>
-          Find your business on Reviu and claim it to access your dashboard.
-        </div>
-        <Link href="/" style={{ display: "block", background: "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", textDecoration: "none" }}>
-          Find my business
-        </Link>
+        <div style={{ fontSize: "14px", color: "#888", marginBottom: "24px", lineHeight: "1.6" }}>Find your business on Reviu and claim it to access your dashboard.</div>
+        <Link href="/" style={{ display: "block", background: "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", textDecoration: "none" }}>Find my business</Link>
       </div>
     </div>
   )
 
-  const avgRating = reviews.length > 0
-    ? (reviews.reduce((sum, r) => sum + r.stars, 0) / reviews.length).toFixed(1)
-    : "—"
+  const avgRating = reviews.length > 0 ? (reviews.reduce((sum, r) => sum + r.stars, 0) / reviews.length).toFixed(1) : "—"
   const pendingReviews = reviews.filter(r => r.status === "pending")
   const publishedReviews = reviews.filter(r => r.status === "published")
+  const accentColor = business.brand_color || "#534AB7"
 
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
-      <div style={{ background: "#534AB7", padding: "1rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ background: accentColor, padding: "1rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <Link href="/" style={{ color: "white", fontSize: "20px", textDecoration: "none" }}>←</Link>
           <div>
@@ -185,8 +246,11 @@ export default function BusinessDashboard() {
             <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.7)" }}>Business Dashboard</div>
           </div>
         </div>
-        <div style={{ background: "#EAF3DE", color: "#3B6D11", fontSize: "11px", fontWeight: "700", padding: "4px 10px", borderRadius: "20px" }}>
-          ✓ Verified
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <Link href={`/business/${business.id}`} style={{ background: "rgba(255,255,255,0.2)", color: "white", fontSize: "11px", fontWeight: "600", padding: "5px 12px", borderRadius: "20px", textDecoration: "none" }}>
+            View profile →
+          </Link>
+          <div style={{ background: "#EAF3DE", color: "#3B6D11", fontSize: "11px", fontWeight: "700", padding: "4px 10px", borderRadius: "20px" }}>✓</div>
         </div>
       </div>
 
@@ -196,21 +260,10 @@ export default function BusinessDashboard() {
           { id: "reviews", label: `Reviews ${reviews.length > 0 ? `(${reviews.length})` : ""}` },
           { id: "special", label: "Special" },
           { id: "reels", label: "Reels" },
+          { id: "brand", label: "Brand" },
+          { id: "rewards", label: "Rewards" },
         ].map(tab => (
-          <div
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={{
-              padding: "12px 16px",
-              fontSize: "13px",
-              fontWeight: activeTab === tab.id ? "600" : "400",
-              color: activeTab === tab.id ? "#534AB7" : "#888",
-              borderBottom: activeTab === tab.id ? "2px solid #534AB7" : "2px solid transparent",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
-          >{tab.label}</div>
+          <div key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: "12px 16px", fontSize: "13px", fontWeight: activeTab === tab.id ? "600" : "400", color: activeTab === tab.id ? accentColor : "#888", borderBottom: activeTab === tab.id ? `2px solid ${accentColor}` : "2px solid transparent", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{tab.label}</div>
         ))}
       </div>
 
@@ -220,9 +273,9 @@ export default function BusinessDashboard() {
           <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "16px" }}>
               {[
-                { label: "Total reviews", value: reviews.length.toString(), color: "#534AB7" },
+                { label: "Total reviews", value: reviews.length.toString(), color: accentColor },
                 { label: "Avg Reviu rating", value: `${avgRating} ★`, color: "#f59e0b" },
-                { label: "Pending responses", value: pendingReviews.length.toString(), color: pendingReviews.length > 0 ? "#A32D2D" : "#3B6D11" },
+                { label: "Reviu followers", value: followers.toString(), color: accentColor },
                 { label: "Published reviews", value: publishedReviews.length.toString(), color: "#3B6D11" },
               ].map(stat => (
                 <div key={stat.label} style={{ background: "white", borderRadius: "12px", padding: "14px", border: "1px solid #eee" }}>
@@ -234,49 +287,30 @@ export default function BusinessDashboard() {
 
             {pendingReviews.length > 0 && (
               <div style={{ background: "#FAEEDA", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px" }}>
-                <div style={{ fontSize: "13px", fontWeight: "600", color: "#854F0B", marginBottom: "4px" }}>
-                  ⏱ {pendingReviews.length} review{pendingReviews.length > 1 ? "s" : ""} in resolution window
-                </div>
-                <div style={{ fontSize: "12px", color: "#854F0B", lineHeight: "1.5" }}>
-                  You have 72 hours to respond privately before it goes public.
-                </div>
-                <div onClick={() => setActiveTab("reviews")} style={{ fontSize: "12px", color: "#534AB7", fontWeight: "600", marginTop: "8px", cursor: "pointer" }}>
-                  View and respond →
-                </div>
+                <div style={{ fontSize: "13px", fontWeight: "600", color: "#854F0B", marginBottom: "4px" }}>⏱ {pendingReviews.length} review{pendingReviews.length > 1 ? "s" : ""} in 72hr resolution window</div>
+                <div style={{ fontSize: "12px", color: "#854F0B", lineHeight: "1.5" }}>Respond privately before they go public.</div>
+                <div onClick={() => setActiveTab("reviews")} style={{ fontSize: "12px", color: accentColor, fontWeight: "600", marginTop: "8px", cursor: "pointer" }}>View and respond →</div>
               </div>
             )}
 
-            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
+            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee" }}>
               <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "12px" }}>Quick actions</div>
               {[
-                { label: "Post today's special", sub: "Let people know what's happening today", tab: "special", icon: "✨" },
-                { label: "Post a reel", sub: "Share a video to attract new customers", tab: "reels", icon: "🎬" },
+                { label: "Brand your profile", sub: "Logo, colors, gallery, music", tab: "brand", icon: "🎨" },
+                { label: "Post today's special", sub: "Notify your followers instantly", tab: "special", icon: "✨" },
+                { label: "Post a reel", sub: "Share a video to attract customers", tab: "reels", icon: "🎬" },
+                { label: "Reviu Rewards", sub: `${followers} followers on your list`, tab: "rewards", icon: "⭐" },
                 { label: "Respond to reviews", sub: `${pendingReviews.length} pending in 72hr window`, tab: "reviews", icon: "💬" },
               ].map(action => (
                 <div key={action.label} onClick={() => setActiveTab(action.tab)} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 0", borderBottom: "1px solid #f5f5f5", cursor: "pointer" }}>
                   <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", flexShrink: 0 }}>{action.icon}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "14px", fontWeight: "500", color: "#534AB7" }}>{action.label}</div>
+                    <div style={{ fontSize: "14px", fontWeight: "500", color: accentColor }}>{action.label}</div>
                     <div style={{ fontSize: "12px", color: "#888" }}>{action.sub}</div>
                   </div>
                   <span style={{ color: "#ddd", fontSize: "18px" }}>›</span>
                 </div>
               ))}
-            </div>
-
-            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee" }}>
-              <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "12px" }}>External ratings</div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                {[
-                  { label: "Google", value: `${business.google_rating} ★` },
-                  { label: "Yelp", value: business.yelp_rating ? `${business.yelp_rating} ★` : "N/A" },
-                ].map(stat => (
-                  <div key={stat.label} style={{ flex: 1, background: "#f7f7f5", borderRadius: "10px", padding: "10px", textAlign: "center" }}>
-                    <div style={{ fontSize: "11px", color: "#888", marginBottom: "2px" }}>{stat.label}</div>
-                    <div style={{ fontSize: "16px", fontWeight: "700" }}>{stat.value}</div>
-                  </div>
-                ))}
-              </div>
             </div>
           </>
         )}
@@ -294,20 +328,22 @@ export default function BusinessDashboard() {
                 <div key={review.id} style={{ background: "white", borderRadius: "16px", padding: "1.25rem", marginBottom: "12px", border: review.status === "pending" ? "1px solid #EF9F27" : "1px solid #eee" }}>
                   {review.status === "pending" && (
                     <div style={{ background: "#FAEEDA", borderRadius: "8px", padding: "8px 12px", marginBottom: "12px", fontSize: "12px", color: "#854F0B", fontWeight: "500" }}>
-                      ⏱ In 72hr resolution window — respond before it goes public
+                      ⏱ 72hr window — {review.stars} star{review.stars > 1 ? "s" : ""} · respond before it goes public
+                    </div>
+                  )}
+                  {review.can_upgrade && review.status === "published" && (
+                    <div style={{ background: "#EEEDFE", borderRadius: "8px", padding: "8px 12px", marginBottom: "12px", fontSize: "12px", color: "#3C3489", fontWeight: "500" }}>
+                      ✨ 4-star review · customer can upgrade to 5 stars after resolution
                     </div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: "#534AB7" }}>
+                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: accentColor }}>
                         {review.reviewer_initials || "R"}
                       </div>
                       <div>
                         <div style={{ fontSize: "13px", fontWeight: "600" }}>{review.reviewer_name || "Reviu Member"}</div>
-                        <div style={{ fontSize: "11px", color: "#888" }}>
-                          {review.context_tag && `${review.context_tag} · `}
-                          {new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        </div>
+                        <div style={{ fontSize: "11px", color: "#888" }}>{review.context_tag && `${review.context_tag} · `}{new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
                       </div>
                     </div>
                     <div style={{ display: "flex" }}>
@@ -317,24 +353,15 @@ export default function BusinessDashboard() {
                     </div>
                   </div>
                   <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.6", marginBottom: "12px" }}>{review.text}</div>
-
                   {review.business_response ? (
                     <div style={{ background: "#EEEDFE", borderRadius: "10px", padding: "10px 12px" }}>
-                      <div style={{ fontSize: "11px", fontWeight: "600", color: "#534AB7", marginBottom: "4px" }}>Your response</div>
+                      <div style={{ fontSize: "11px", fontWeight: "600", color: accentColor, marginBottom: "4px" }}>Your response</div>
                       <div style={{ fontSize: "13px", color: "#3C3489", lineHeight: "1.5" }}>{review.business_response}</div>
                     </div>
                   ) : (
                     <div>
-                      <textarea
-                        value={responseText[review.id] || ""}
-                        onChange={e => setResponseText(prev => ({ ...prev, [review.id]: e.target.value }))}
-                        placeholder="Respond to this review..."
-                        style={{ width: "100%", padding: "10px 12px", borderRadius: "10px", border: "1px solid #e5e5e5", fontSize: "13px", background: "#f7f7f5", minHeight: "80px", resize: "none", boxSizing: "border-box", fontFamily: "sans-serif", lineHeight: "1.5", marginBottom: "8px" }}
-                      />
-                      <div
-                        onClick={() => saveResponse(review.id)}
-                        style={{ background: savingResponse === review.id ? "#9990D9" : "#534AB7", color: "white", padding: "10px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", cursor: "pointer" }}
-                      >
+                      <textarea value={responseText[review.id] || ""} onChange={e => setResponseText(prev => ({ ...prev, [review.id]: e.target.value }))} placeholder="Respond to this review..." style={{ width: "100%", padding: "10px 12px", borderRadius: "10px", border: "1px solid #e5e5e5", fontSize: "13px", background: "#f7f7f5", minHeight: "80px", resize: "none", boxSizing: "border-box", fontFamily: "sans-serif", lineHeight: "1.5", marginBottom: "8px" }} />
+                      <div onClick={() => saveResponse(review.id)} style={{ background: savingResponse === review.id ? "#9990D9" : accentColor, color: "white", padding: "10px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", cursor: "pointer" }}>
                         {savingResponse === review.id ? "Sending..." : "Send response"}
                       </div>
                     </div>
@@ -348,78 +375,41 @@ export default function BusinessDashboard() {
         {activeTab === "special" && (
           <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee" }}>
             <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Today's special</div>
-            <div style={{ fontSize: "13px", color: "#888", marginBottom: "16px", lineHeight: "1.5" }}>
-              Post something happening today — a dish, a deal, an event. Add a photo or video to make it stand out. Expires in 24 hours automatically.
-            </div>
+            <div style={{ fontSize: "13px", color: "#888", marginBottom: "8px", lineHeight: "1.5" }}>Post something happening today. Your Reviu followers get notified instantly. Expires in 24 hours.</div>
+            {followers > 0 && (
+              <div style={{ background: "#EEEDFE", borderRadius: "10px", padding: "8px 12px", marginBottom: "16px", fontSize: "12px", color: "#3C3489" }}>
+                ⭐ {followers} follower{followers > 1 ? "s" : ""} will be notified when you post
+              </div>
+            )}
 
             <div style={{ marginBottom: "16px" }}>
               <label style={{ fontSize: "12px", fontWeight: "600", color: "#888", display: "block", marginBottom: "8px" }}>Photo or video</label>
-
               {specialMediaUrl ? (
                 <div style={{ position: "relative", borderRadius: "12px", overflow: "hidden", marginBottom: "8px" }}>
-                  {specialMediaType === "video" ? (
-                    <video src={specialMediaUrl} controls style={{ width: "100%", borderRadius: "12px" }} />
-                  ) : (
-                    <img src={specialMediaUrl} alt="Special" style={{ width: "100%", borderRadius: "12px", objectFit: "cover", maxHeight: "200px" }} />
-                  )}
-                  <div
-                    onClick={() => { setSpecialMediaUrl(""); setSpecialMediaType("") }}
-                    style={{ position: "absolute", top: "8px", right: "8px", background: "rgba(0,0,0,0.6)", color: "white", width: "28px", height: "28px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "14px" }}
-                  >✕</div>
+                  {specialMediaType === "video" ? <video src={specialMediaUrl} controls style={{ width: "100%", borderRadius: "12px" }} /> : <img src={specialMediaUrl} alt="Special" style={{ width: "100%", borderRadius: "12px", objectFit: "cover", maxHeight: "200px" }} />}
+                  <div onClick={() => { setSpecialMediaUrl(""); setSpecialMediaType("") }} style={{ position: "absolute", top: "8px", right: "8px", background: "rgba(0,0,0,0.6)", color: "white", width: "28px", height: "28px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "14px" }}>✕</div>
                 </div>
               ) : (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{ border: "2px dashed #e5e5e5", borderRadius: "12px", padding: "2rem", textAlign: "center", cursor: "pointer", background: "#f7f7f5", marginBottom: "8px" }}
-                >
-                  {uploadingMedia ? (
-                    <div style={{ color: "#888", fontSize: "14px" }}>Uploading...</div>
-                  ) : (
-                    <>
-                      <div style={{ fontSize: "32px", marginBottom: "8px" }}>📸</div>
-                      <div style={{ fontSize: "13px", fontWeight: "600", color: "#534AB7", marginBottom: "4px" }}>Add a photo or video</div>
-                      <div style={{ fontSize: "12px", color: "#aaa" }}>Tap to upload from your device</div>
-                    </>
+                <div onClick={() => fileInputRef.current?.click()} style={{ border: "2px dashed #e5e5e5", borderRadius: "12px", padding: "2rem", textAlign: "center", cursor: "pointer", background: "#f7f7f5", marginBottom: "8px" }}>
+                  {uploadingMedia ? <div style={{ color: "#888", fontSize: "14px" }}>Uploading...</div> : (
+                    <><div style={{ fontSize: "32px", marginBottom: "8px" }}>📸</div><div style={{ fontSize: "13px", fontWeight: "600", color: accentColor, marginBottom: "4px" }}>Add a photo or video</div><div style={{ fontSize: "12px", color: "#aaa" }}>Tap to upload from your device</div></>
                   )}
                 </div>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*"
-                onChange={handleMediaUpload}
-                style={{ display: "none" }}
-              />
+              <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleMediaUpload} style={{ display: "none" }} />
             </div>
 
             <div style={{ marginBottom: "16px" }}>
               <label style={{ fontSize: "12px", fontWeight: "600", color: "#888", display: "block", marginBottom: "6px" }}>Description</label>
-              <textarea
-                value={specialText}
-                onChange={e => setSpecialText(e.target.value)}
-                placeholder="e.g. Half price oysters at the bar 5–7pm. Live jazz starts at 8."
-                style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", minHeight: "100px", resize: "none", boxSizing: "border-box", fontFamily: "sans-serif", lineHeight: "1.6" }}
-              />
+              <textarea value={specialText} onChange={e => setSpecialText(e.target.value)} placeholder="e.g. Half price oysters at the bar 5-7pm. Live jazz starts at 8." style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", minHeight: "100px", resize: "none", boxSizing: "border-box", fontFamily: "sans-serif", lineHeight: "1.6" }} />
             </div>
 
-            {specialSaved && (
-              <div style={{ background: "#EAF3DE", color: "#3B6D11", padding: "10px 14px", borderRadius: "10px", fontSize: "13px", fontWeight: "500", marginBottom: "12px" }}>
-                ✓ Special posted — now live on your profile and homepage
-              </div>
-            )}
-
-            <div
-              onClick={saveSpecial}
-              style={{ background: savingSpecial ? "#9990D9" : "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", cursor: "pointer", marginBottom: "10px" }}
-            >
+            {specialSaved && <div style={{ background: "#EAF3DE", color: "#3B6D11", padding: "10px 14px", borderRadius: "10px", fontSize: "13px", fontWeight: "500", marginBottom: "12px" }}>✓ Special posted — followers notified</div>}
+            <div onClick={saveSpecial} style={{ background: savingSpecial ? "#9990D9" : accentColor, color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", cursor: "pointer", marginBottom: "10px" }}>
               {savingSpecial ? "Posting..." : "Post special"}
             </div>
-
             {(specialText || specialMediaUrl) && (
-              <div
-                onClick={() => { setSpecialText(""); setSpecialMediaUrl(""); setSpecialMediaType(""); saveSpecial() }}
-                style={{ background: "white", color: "#A32D2D", padding: "12px", borderRadius: "12px", fontSize: "13px", fontWeight: "600", textAlign: "center", cursor: "pointer", border: "1px solid #F09595" }}
-              >
+              <div onClick={() => { setSpecialText(""); setSpecialMediaUrl(""); setSpecialMediaType(""); saveSpecial() }} style={{ background: "white", color: "#A32D2D", padding: "12px", borderRadius: "12px", fontSize: "13px", fontWeight: "600", textAlign: "center", cursor: "pointer", border: "1px solid #F09595" }}>
                 Remove today's special
               </div>
             )}
@@ -430,21 +420,12 @@ export default function BusinessDashboard() {
           <>
             <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
               <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Post a reel</div>
-              <div style={{ fontSize: "13px", color: "#888", marginBottom: "16px", lineHeight: "1.5" }}>
-                Share a video to show off your food, atmosphere, or a special moment. Daily reels expire in 24 hours. Featured reels stay on your profile permanently.
-              </div>
+              <div style={{ fontSize: "13px", color: "#888", marginBottom: "16px", lineHeight: "1.5" }}>Share a video to show off your food, atmosphere, or a special moment.</div>
 
               <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-                {[
-                  { value: "daily", label: "🌅 Daily", sub: "Expires in 24hrs" },
-                  { value: "featured", label: "⭐ Featured", sub: "Stays forever" },
-                ].map(opt => (
-                  <div
-                    key={opt.value}
-                    onClick={() => setReelType(opt.value)}
-                    style={{ flex: 1, padding: "12px", borderRadius: "12px", border: reelType === opt.value ? "2px solid #534AB7" : "1px solid #eee", background: reelType === opt.value ? "#EEEDFE" : "#f7f7f5", cursor: "pointer", textAlign: "center" }}
-                  >
-                    <div style={{ fontSize: "14px", fontWeight: "600", color: reelType === opt.value ? "#534AB7" : "#333" }}>{opt.label}</div>
+                {[{ value: "daily", label: "🌅 Daily", sub: "Expires in 24hrs" }, { value: "featured", label: "⭐ Featured", sub: "Stays forever" }].map(opt => (
+                  <div key={opt.value} onClick={() => setReelType(opt.value)} style={{ flex: 1, padding: "12px", borderRadius: "12px", border: reelType === opt.value ? `2px solid ${accentColor}` : "1px solid #eee", background: reelType === opt.value ? "#EEEDFE" : "#f7f7f5", cursor: "pointer", textAlign: "center" }}>
+                    <div style={{ fontSize: "14px", fontWeight: "600", color: reelType === opt.value ? accentColor : "#333" }}>{opt.label}</div>
                     <div style={{ fontSize: "11px", color: "#888", marginTop: "2px" }}>{opt.sub}</div>
                   </div>
                 ))}
@@ -452,47 +433,22 @@ export default function BusinessDashboard() {
 
               <div style={{ marginBottom: "12px" }}>
                 <label style={{ fontSize: "12px", fontWeight: "600", color: "#888", display: "block", marginBottom: "6px" }}>Title</label>
-                <input
-                  type="text"
-                  value={reelTitle}
-                  onChange={e => setReelTitle(e.target.value)}
-                  placeholder="e.g. Friday night truffle pasta"
-                  style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", boxSizing: "border-box" }}
-                />
+                <input type="text" value={reelTitle} onChange={e => setReelTitle(e.target.value)} placeholder="e.g. Friday night truffle pasta" style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", boxSizing: "border-box" }} />
               </div>
 
               <div style={{ marginBottom: "12px" }}>
                 <label style={{ fontSize: "12px", fontWeight: "600", color: "#888", display: "block", marginBottom: "6px" }}>Description (optional)</label>
-                <textarea
-                  value={reelDesc}
-                  onChange={e => setReelDesc(e.target.value)}
-                  placeholder="Tell people what they are watching..."
-                  style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", minHeight: "80px", resize: "none", boxSizing: "border-box", fontFamily: "sans-serif", lineHeight: "1.5" }}
-                />
+                <textarea value={reelDesc} onChange={e => setReelDesc(e.target.value)} placeholder="Tell people what they are watching..." style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", minHeight: "80px", resize: "none", boxSizing: "border-box", fontFamily: "sans-serif", lineHeight: "1.5" }} />
               </div>
 
               <div style={{ marginBottom: "16px" }}>
                 <label style={{ fontSize: "12px", fontWeight: "600", color: "#888", display: "block", marginBottom: "6px" }}>Video URL</label>
-                <input
-                  type="text"
-                  value={reelUrl}
-                  onChange={e => setReelUrl(e.target.value)}
-                  placeholder="https://... (YouTube, Vimeo, TikTok link)"
-                  style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", boxSizing: "border-box" }}
-                />
-                <div style={{ fontSize: "11px", color: "#aaa", marginTop: "4px" }}>Direct video upload coming soon. For now paste a link.</div>
+                <input type="text" value={reelUrl} onChange={e => setReelUrl(e.target.value)} placeholder="https://... (YouTube, Vimeo, TikTok link)" style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", boxSizing: "border-box" }} />
+                <div style={{ fontSize: "11px", color: "#aaa", marginTop: "4px" }}>Direct video upload coming soon.</div>
               </div>
 
-              {reelSaved && (
-                <div style={{ background: "#EAF3DE", color: "#3B6D11", padding: "10px 14px", borderRadius: "10px", fontSize: "13px", fontWeight: "500", marginBottom: "12px" }}>
-                  ✓ Reel posted successfully
-                </div>
-              )}
-
-              <div
-                onClick={postReel}
-                style={{ background: !reelTitle || !reelUrl || savingReel ? "#9990D9" : "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", cursor: !reelTitle || !reelUrl ? "not-allowed" : "pointer" }}
-              >
+              {reelSaved && <div style={{ background: "#EAF3DE", color: "#3B6D11", padding: "10px 14px", borderRadius: "10px", fontSize: "13px", fontWeight: "500", marginBottom: "12px" }}>✓ Reel posted successfully</div>}
+              <div onClick={postReel} style={{ background: !reelTitle || !reelUrl || savingReel ? "#9990D9" : accentColor, color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", cursor: !reelTitle || !reelUrl ? "not-allowed" : "pointer" }}>
                 {savingReel ? "Posting..." : "Post reel"}
               </div>
             </div>
@@ -504,7 +460,7 @@ export default function BusinessDashboard() {
                   <div key={reel.id} style={{ paddingBottom: "12px", marginBottom: "12px", borderBottom: "1px solid #f5f5f5" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
                       <div style={{ fontSize: "14px", fontWeight: "600" }}>{reel.title}</div>
-                      <span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "10px", background: reel.reel_type === "featured" ? "#EAF3DE" : "#EEEDFE", color: reel.reel_type === "featured" ? "#3B6D11" : "#534AB7" }}>
+                      <span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "10px", background: reel.reel_type === "featured" ? "#EAF3DE" : "#EEEDFE", color: reel.reel_type === "featured" ? "#3B6D11" : accentColor }}>
                         {reel.reel_type === "featured" ? "⭐ Featured" : "🌅 Daily"}
                       </span>
                     </div>
@@ -517,6 +473,164 @@ export default function BusinessDashboard() {
                 ))}
               </div>
             )}
+          </>
+        )}
+
+        {activeTab === "brand" && (
+          <>
+            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
+              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Logo</div>
+              <div style={{ fontSize: "13px", color: "#888", marginBottom: "16px", lineHeight: "1.5" }}>Upload your logo. It replaces the initials on your profile.</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "12px" }}>
+                <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: accentColor, border: "4px solid #eee", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+                  {business.logo_url ? <img src={business.logo_url} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: "22px", fontWeight: "700", color: "white" }}>{business.name.slice(0, 2).toUpperCase()}</span>}
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <div onClick={() => logoInputRef.current?.click()} style={{ padding: "10px 12px", borderRadius: "10px", border: `2px dashed ${accentColor}`, textAlign: "center", cursor: "pointer", background: "#f7f7f5" }}>
+                    <div style={{ fontSize: "13px", fontWeight: "600", color: accentColor }}>{uploadingLogo ? "Uploading..." : "Upload logo"}</div>
+                  </div>
+                  {business.logo_url && (
+                    <div onClick={removeLogo} style={{ padding: "8px 12px", borderRadius: "10px", border: "1px solid #F09595", textAlign: "center", cursor: "pointer", background: "white" }}>
+                      <div style={{ fontSize: "12px", fontWeight: "600", color: "#A32D2D" }}>Remove — use initials</div>
+                    </div>
+                  )}
+                </div>
+                <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: "none" }} />
+              </div>
+            </div>
+
+            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
+              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Brand color</div>
+              <div style={{ fontSize: "13px", color: "#888", marginBottom: "16px", lineHeight: "1.5" }}>Pick your exact brand color. Use the eyedropper to match it precisely.</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <input type="color" value={brandColor} onChange={e => setBrandColor(e.target.value)} style={{ width: "56px", height: "56px", borderRadius: "12px", border: "none", cursor: "pointer", padding: "4px", background: "none" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "14px", fontWeight: "600", marginBottom: "4px" }}>Current color</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: brandColor }} />
+                    <div style={{ fontSize: "13px", color: "#888", fontFamily: "monospace" }}>{brandColor}</div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: "12px", color: "#aaa", marginTop: "12px" }}>💡 Click the color box and use the eyedropper to match your exact brand color.</div>
+            </div>
+
+            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
+              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Tagline</div>
+              <div style={{ fontSize: "13px", color: "#888", marginBottom: "12px" }}>A short line that appears under your name.</div>
+              <input type="text" value={tagline} onChange={e => setTagline(e.target.value)} placeholder="e.g. Cincinnati's best kept secret since 2019" maxLength={80} style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", boxSizing: "border-box" }} />
+              <div style={{ fontSize: "11px", color: "#aaa", marginTop: "4px", textAlign: "right" }}>{tagline.length}/80</div>
+            </div>
+
+            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
+              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Photo gallery</div>
+              <div style={{ fontSize: "13px", color: "#888", marginBottom: "12px", lineHeight: "1.5" }}>Up to 8 photos shown in a scrollable strip on your profile.</div>
+              {(business.gallery_urls || []).length > 0 && (
+                <div style={{ display: "flex", gap: "8px", overflowX: "auto", marginBottom: "12px", paddingBottom: "4px" }}>
+                  {(business.gallery_urls || []).map((url: string, i: number) => (
+                    <div key={i} style={{ position: "relative", flexShrink: 0 }}>
+                      <img src={url} alt={`Gallery ${i+1}`} style={{ width: "80px", height: "80px", objectFit: "cover", borderRadius: "10px" }} />
+                      <div onClick={() => removeGalleryPhoto(url)} style={{ position: "absolute", top: "4px", right: "4px", background: "rgba(0,0,0,0.6)", color: "white", width: "20px", height: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "11px" }}>✕</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {(business.gallery_urls || []).length < 8 && (
+                <div onClick={() => galleryInputRef.current?.click()} style={{ border: "2px dashed #e5e5e5", borderRadius: "12px", padding: "1.5rem", textAlign: "center", cursor: "pointer", background: "#f7f7f5" }}>
+                  {uploadingGallery ? <div style={{ color: "#888" }}>Uploading...</div> : (
+                    <><div style={{ fontSize: "24px", marginBottom: "6px" }}>📷</div><div style={{ fontSize: "13px", fontWeight: "600", color: accentColor }}>Add photos</div><div style={{ fontSize: "11px", color: "#aaa", marginTop: "2px" }}>{8 - (business.gallery_urls || []).length} spots remaining</div></>
+                  )}
+                </div>
+              )}
+              <input ref={galleryInputRef} type="file" accept="image/*" multiple onChange={handleGalleryUpload} style={{ display: "none" }} />
+            </div>
+
+            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
+              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Profile music</div>
+              <div style={{ fontSize: "13px", color: "#888", marginBottom: "12px", lineHeight: "1.5" }}>A song that plays softly when someone opens your profile.</div>
+              <div style={{ marginBottom: "10px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "600", color: "#888", display: "block", marginBottom: "6px" }}>Song title</label>
+                <input type="text" value={musicTitle} onChange={e => setMusicTitle(e.target.value)} placeholder="e.g. Kind of Blue - Miles Davis" style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", fontWeight: "600", color: "#888", display: "block", marginBottom: "6px" }}>Audio URL</label>
+                <input type="text" value={musicUrl} onChange={e => setMusicUrl(e.target.value)} placeholder="https://... (direct audio link)" style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", boxSizing: "border-box" }} />
+                <div style={{ fontSize: "11px", color: "#aaa", marginTop: "4px" }}>Spotify integration coming soon.</div>
+              </div>
+            </div>
+
+            {brandSaved && <div style={{ background: "#EAF3DE", color: "#3B6D11", padding: "10px 14px", borderRadius: "10px", fontSize: "13px", fontWeight: "500", marginBottom: "12px" }}>✓ Brand settings saved</div>}
+            <div onClick={saveBrand} style={{ background: savingBrand ? "#9990D9" : accentColor, color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", cursor: "pointer" }}>
+              {savingBrand ? "Saving..." : "Save brand settings"}
+            </div>
+          </>
+        )}
+
+        {activeTab === "rewards" && (
+          <>
+            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
+              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Reviu Rewards</div>
+              <div style={{ fontSize: "13px", color: "#888", marginBottom: "16px", lineHeight: "1.5" }}>
+                Customers who follow your business on Reviu get notified when you post specials or reels. Build your list and keep them coming back.
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "20px" }}>
+                <div style={{ background: "#f7f7f5", borderRadius: "12px", padding: "16px", textAlign: "center", border: `2px solid ${accentColor}` }}>
+                  <div style={{ fontSize: "32px", fontWeight: "700", color: accentColor }}>{followers}</div>
+                  <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>Total followers</div>
+                </div>
+                <div style={{ background: "#f7f7f5", borderRadius: "12px", padding: "16px", textAlign: "center" }}>
+                  <div style={{ fontSize: "32px", fontWeight: "700", color: "#3B6D11" }}>{publishedReviews.length}</div>
+                  <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>Verified reviewers</div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "12px" }}>How followers get notified</div>
+              {[
+                { icon: "✨", title: "Today's specials", sub: "Followers get an in-app notification when you post a special" },
+                { icon: "🎬", title: "New reels", sub: "Daily reels show in followers' feeds when posted" },
+                { icon: "📍", title: "Profile updates", sub: "Followers see when you update your gallery or info" },
+              ].map(item => (
+                <div key={item.title} style={{ display: "flex", gap: "12px", padding: "12px 0", borderBottom: "1px solid #f5f5f5" }}>
+                  <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", flexShrink: 0 }}>{item.icon}</div>
+                  <div>
+                    <div style={{ fontSize: "14px", fontWeight: "500", color: "#111", marginBottom: "2px" }}>{item.title}</div>
+                    <div style={{ fontSize: "12px", color: "#888" }}>{item.sub}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
+              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Grow your followers</div>
+              <div style={{ fontSize: "13px", color: "#888", marginBottom: "16px", lineHeight: "1.5" }}>The more people follow you on Reviu the bigger your reach when you post specials.</div>
+              {[
+                { tip: "Post specials consistently", sub: "Followers who see value keep coming back" },
+                { tip: "Share your Reviu profile link", sub: "Add it to your Instagram bio or website" },
+                { tip: "Connect with influencers", sub: "Influencer features bring new followers fast" },
+                { tip: "Respond to every review", sub: "Shows you care — builds trust and follows" },
+              ].map((tip, i) => (
+                <div key={i} style={{ display: "flex", gap: "12px", alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid #f5f5f5" }}>
+                  <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: accentColor, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: "white", flexShrink: 0, marginTop: "1px" }}>{i + 1}</div>
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: "600", color: "#111", marginBottom: "2px" }}>{tip.tip}</div>
+                    <div style={{ fontSize: "12px", color: "#888" }}>{tip.sub}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ background: accentColor, borderRadius: "16px", padding: "1.25rem", textAlign: "center" }}>
+              <div style={{ fontSize: "15px", fontWeight: "700", color: "white", marginBottom: "8px" }}>Share your Reviu profile</div>
+              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.8)", marginBottom: "16px" }}>Let customers know they can follow you on Reviu for exclusive specials</div>
+              <div style={{ background: "rgba(255,255,255,0.15)", borderRadius: "10px", padding: "10px 14px", fontSize: "12px", color: "white", fontFamily: "monospace", marginBottom: "12px", wordBreak: "break-all" }}>
+                reviu-swart.vercel.app/business/{business.id}
+              </div>
+              <div style={{ background: "white", color: accentColor, padding: "12px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", cursor: "pointer" }}
+                onClick={() => navigator.clipboard?.writeText(`https://reviu-swart.vercel.app/business/${business.id}`)}>
+                Copy profile link
+              </div>
+            </div>
           </>
         )}
       </div>
