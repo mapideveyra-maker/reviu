@@ -19,6 +19,16 @@ const contextTags: Record<string, { icon: string; label: string }[]> = {
   "default": [{ icon: "🆕", label: "First time here" }, { icon: "🔄", label: "Regular visitor" }, { icon: "🎁", label: "Someone's guest" }, { icon: "💼", label: "Special occasion" }],
 }
 
+const reviewPrompts: Record<string, string> = {
+  "Fine Dining": "Share your honest experience. Consider: Were the ingredients fresh and quality? Did the cooking show real skill? Did the flavors come together? Was there something unique about this place? Would others get the same experience you did?",
+  "Italian Restaurant": "Share your honest experience. Consider: Were the ingredients fresh and quality? Did the cooking show real skill? Did the flavors come together? Was there something unique about this place? Would others get the same experience you did?",
+  "Mexican Restaurant": "Share your honest experience. Consider: Were the ingredients fresh and quality? Did the cooking show real skill? Did the flavors come together? Was there something unique about this place? Would others get the same experience you did?",
+  "Asian Restaurant": "Share your honest experience. Consider: Were the ingredients fresh and quality? Did the cooking show real skill? Did the flavors come together? Was there something unique about this place? Would others get the same experience you did?",
+  "Experience": "Share your honest experience. Consider: Was the quality what you expected? Did it show real craft or skill? Was there something unique about it? Would others get the same experience you did?",
+  "Fitness": "Share your honest experience. Consider: Was the instruction quality high? Did the environment support your goals? Was there something unique about this place? Would you get the same experience every visit?",
+  "default": "Share your honest experience. Consider: Was the quality there? Did it show real skill or craft? Was there something unique about this place? Would others get the same experience you did?",
+}
+
 function ReviewForm() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -59,6 +69,7 @@ function ReviewForm() {
   }, [bizId])
 
   const tags = selectedBiz ? contextTags[selectedBiz.category] || contextTags.default : contextTags.default
+  const prompt = selectedBiz ? reviewPrompts[selectedBiz.category] || reviewPrompts.default : reviewPrompts.default
 
   async function handleSubmit() {
     if (!selectedBiz) { setError("Please select a business"); return }
@@ -110,7 +121,7 @@ function ReviewForm() {
 
   if (submitted) return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem", textAlign: "center" }}>
-      <div style={{ fontSize: "48px", marginBottom: "16px" }}>{submittedStars >= 4 ? "🎉" : "⏱"}</div>
+      <div style={{ fontSize: "48px", marginBottom: "16px" }}>{submittedStars >= 4 ? "🎉" : "⏳"}</div>
       <div style={{ fontSize: "22px", fontWeight: "700", marginBottom: "8px" }}>
         {submittedStars >= 4 ? "Review is live!" : "Review submitted"}
       </div>
@@ -189,7 +200,7 @@ function ReviewForm() {
               <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "16px" }}>Your rating</div>
               <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginBottom: "8px" }}>
                 {[1, 2, 3, 4, 5].map(star => (
-                  <span key={star} onClick={() => setStars(star)} onMouseEnter={() => setHover(star)} onMouseLeave={() => setHover(0)} style={{ fontSize: "40px", cursor: "pointer", color: star <= (hover || stars) ? "#f59e0b" : "#ddd", transition: "color 0.1s" }}>★</span>
+                  <span key={star} onClick={() => setStars(star)} onMouseEnter={() => setHover(star)} onMouseLeave={() => setHover(0)} style={{ fontSize: "40px", cursor: "pointer", color: star <= (hover || stars) ? "#534AB7" : "#ddd", transition: "color 0.1s" }}>✦</span>
                 ))}
               </div>
               <div style={{ textAlign: "center", fontSize: "13px", fontWeight: "500", color: "#888" }}>
@@ -202,19 +213,19 @@ function ReviewForm() {
               </div>
               {stars > 0 && stars <= 3 && (
                 <div style={{ marginTop: "10px", background: "#FAEEDA", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", color: "#854F0B", lineHeight: "1.5" }}>
-                  ⏱ Reviews with 3 stars or under enter a 72-hour window where the business can reach out to resolve your experience before it goes public.
+                  ⏱ Reviews with 3 ✦ or under enter a 72-hour window where the business can reach out to resolve your experience before it goes public.
                 </div>
               )}
               {stars === 4 && (
                 <div style={{ marginTop: "10px", background: "#EEEDFE", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", color: "#3C3489", lineHeight: "1.5" }}>
-                  ✨ Your 4-star review posts immediately. If the business reaches out and makes it right, you can upgrade it to 5 stars from your profile.
+                  ✦ Your 4 ✦ review posts immediately. If the business reaches out and makes it right, you can upgrade it to 5 ✦ from your profile.
                 </div>
               )}
             </div>
 
             <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", marginBottom: "12px", border: "1px solid #eee" }}>
               <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "12px" }}>Your experience</div>
-              <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Share your honest perspective. Every experience is valid — yours matters here." style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", minHeight: "130px", resize: "none", boxSizing: "border-box", lineHeight: "1.6", fontFamily: "sans-serif" }} />
+              <textarea value={text} onChange={e => setText(e.target.value)} placeholder={prompt} style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", minHeight: "150px", resize: "none", boxSizing: "border-box", lineHeight: "1.6", fontFamily: "sans-serif" }} />
               <div style={{ fontSize: "12px", color: "#aaa", marginTop: "6px" }}>{text.length} characters</div>
             </div>
 
@@ -231,7 +242,7 @@ function ReviewForm() {
             </div>
 
             <div style={{ background: "#EEEDFE", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", fontSize: "13px", color: "#3C3489", lineHeight: "1.6" }}>
-              🛡️ <strong>Reviu legitimacy check:</strong> Your review and account history will be verified automatically. Every perspective matters — be honest and fair.
+              ✦ <strong>Reviu Score:</strong> Your review and account history are used to calculate your Reviu Score — a measure of how legitimate and trustworthy your reviews are.
             </div>
 
             {error && <div style={{ background: "#FCEBEB", color: "#A32D2D", padding: "12px 16px", borderRadius: "10px", fontSize: "13px", marginBottom: "12px" }}>{error}</div>}

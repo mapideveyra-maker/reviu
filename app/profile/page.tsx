@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 export default function Profile() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [pendingCount, setPendingCount] = useState(0)
   const router = useRouter()
 
   useEffect(() => {
@@ -14,8 +15,16 @@ export default function Profile() {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       setUser(data.user)
+      if (data.user) {
+        const { data: pending } = await supabase
+          .from("reviews")
+          .select("id")
+          .eq("user_id", data.user.id)
+          .eq("status", "pending")
+        setPendingCount(pending?.length || 0)
+      }
       setLoading(false)
     })
   }, [])
@@ -92,7 +101,7 @@ export default function Profile() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
           {[
             { label: "Reviews", value: "0" },
-            { label: "Legitimacy", value: "—" },
+            { label: "Reviu Score", value: "—" },
             { label: "Helpful votes", value: "0" },
           ].map(stat => (
             <div key={stat.label} style={{ background: "#f7f7f5", borderRadius: "10px", padding: "10px", textAlign: "center" }}>
@@ -103,10 +112,27 @@ export default function Profile() {
         </div>
       </div>
 
+      {pendingCount > 0 && (
+        <Link href="/resolution" style={{ textDecoration: "none", display: "block", margin: "0 0 8px 0" }}>
+          <div style={{ background: "#FAEEDA", padding: "14px 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "20px" }}>⏱</span>
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: "600", color: "#854F0B" }}>
+                  {pendingCount} review{pendingCount > 1 ? "s" : ""} in resolution
+                </div>
+                <div style={{ fontSize: "12px", color: "#854F0B" }}>A business has reached out — tap to respond</div>
+              </div>
+            </div>
+            <span style={{ color: "#854F0B", fontSize: "18px" }}>›</span>
+          </div>
+        </Link>
+      )}
+
       <div style={{ background: "white", padding: "1.25rem", marginBottom: "8px" }}>
         <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "12px" }}>My reviews</div>
         <div style={{ fontSize: "13px", color: "#aaa", textAlign: "center", padding: "1.5rem 0", background: "#f7f7f5", borderRadius: "12px" }}>
-          No reviews yet — go explore some businesses!
+          No published reviews yet — go explore some businesses!
         </div>
         <Link href="/" style={{ display: "block", background: "#534AB7", color: "white", padding: "12px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginTop: "12px" }}>
           Browse businesses

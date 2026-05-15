@@ -88,18 +88,11 @@ export default function Home() {
 
       <div style={{ padding: "1rem 0 0", position: "relative" }}>
         <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px", paddingLeft: "1.25rem", paddingRight: "2.5rem", scrollbarWidth: "none" } as any}>
-          <div
-            onClick={() => setActiveFilter(null)}
-            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "20px", background: activeFilter === null ? "#534AB7" : "white", border: activeFilter === null ? "1px solid #534AB7" : "1px solid #e8e8e8", whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0 }}
-          >
+          <div onClick={() => setActiveFilter(null)} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "20px", background: activeFilter === null ? "#534AB7" : "white", border: activeFilter === null ? "1px solid #534AB7" : "1px solid #e8e8e8", whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0 }}>
             <span style={{ fontSize: "12px", fontWeight: "600", color: activeFilter === null ? "white" : "#444" }}>All</span>
           </div>
           {moodFilters.map(mood => (
-            <div
-              key={mood.label}
-              onClick={() => setActiveFilter(activeFilter === mood.label ? null : mood.label)}
-              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "20px", background: activeFilter === mood.label ? "#534AB7" : "white", border: activeFilter === mood.label ? "1px solid #534AB7" : "1px solid #e8e8e8", whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0 }}
-            >
+            <div key={mood.label} onClick={() => setActiveFilter(activeFilter === mood.label ? null : mood.label)} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "20px", background: activeFilter === mood.label ? "#534AB7" : "white", border: activeFilter === mood.label ? "1px solid #534AB7" : "1px solid #e8e8e8", whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0 }}>
               <span style={{ fontSize: "14px" }}>{mood.icon}</span>
               <span style={{ fontSize: "12px", fontWeight: "500", color: activeFilter === mood.label ? "white" : "#444" }}>{mood.label}</span>
             </div>
@@ -150,7 +143,7 @@ export default function Home() {
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)" }}>{featured.category} · {featured.city}</span>
                   <span style={{ background: "rgba(255,255,255,0.2)", color: "white", fontSize: "11px", fontWeight: "600", padding: "2px 8px", borderRadius: "10px" }}>
-                    {featured.google_rating} ★
+                    {featured.google_rating} ✦
                   </span>
                 </div>
               </div>
@@ -199,7 +192,7 @@ export default function Home() {
                 <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px" }}>{biz.name}</div>
                 <div style={{ fontSize: "12px", color: "#888", marginBottom: "6px" }}>{biz.category} · {biz.city}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ fontSize: "12px", color: "#f59e0b" }}>{"★".repeat(Math.round(biz.google_rating || 0))}</span>
+                  <span style={{ fontSize: "12px", color: "#534AB7" }}>{"✦".repeat(Math.round(biz.google_rating || 0))}</span>
                   <span style={{ fontSize: "11px", color: "#888" }}>{biz.google_rating}</span>
                   {biz.special_today && <span style={{ fontSize: "10px", color: "#534AB7", background: "#EEEDFE", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Special today</span>}
                   {!biz.claimed && !biz.special_today && <span style={{ fontSize: "10px", color: "#854F0B", background: "#FAEEDA", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Unclaimed</span>}

@@ -131,7 +131,7 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
           {avgReviuRating ? (
             <div style={{ display: "flex", alignItems: "center", gap: "4px", background: accentMedium, padding: "5px 12px", borderRadius: "20px", border: `1px solid ${accentBorder}` }}>
-              <span style={{ color: "#f59e0b", fontSize: "14px" }}>{"★".repeat(Math.round(Number(avgReviuRating)))}</span>
+              <span style={{ color: "#534AB7", fontSize: "14px" }}>{"✦".repeat(Math.round(Number(avgReviuRating)))}</span>
               <span style={{ fontSize: "13px", fontWeight: "700", color: accent }}>{avgReviuRating}</span>
               <span style={{ fontSize: "11px", color: "#888" }}>Reviu ({reviews.length})</span>
             </div>
@@ -181,7 +181,7 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
       {biz.special_today && (
         <div style={{ background: "white", padding: "1rem 1.25rem", marginBottom: "8px", borderLeft: `4px solid ${accent}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-            <span style={{ fontSize: "11px", fontWeight: "700", color: accent, background: accentMedium, padding: "3px 10px", borderRadius: "20px", border: `1px solid ${accentBorder}` }}>✨ SPECIAL TODAY</span>
+            <span style={{ fontSize: "11px", fontWeight: "700", color: accent, background: accentMedium, padding: "3px 10px", borderRadius: "20px", border: `1px solid ${accentBorder}` }}>✦ SPECIAL TODAY</span>
           </div>
           {biz.special_media_url && (
             <div style={{ borderRadius: "12px", overflow: "hidden", marginBottom: "10px" }}>
@@ -206,7 +206,7 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
 
         {reviews.length === 0 ? (
           <div style={{ fontSize: "13px", color: "#aaa", textAlign: "center", padding: "2rem 0", background: accentLight, borderRadius: "12px", border: `1px solid ${accentBorder}` }}>
-            No reviews yet — be the first ✨
+            No reviews yet — be the first ✦
           </div>
         ) : (
           reviews.map((review: any) => (
@@ -225,10 +225,15 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
                     </div>
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: "1px", flexShrink: 0 }}>
-                  {[1,2,3,4,5].map(s => (
-                    <span key={s} style={{ fontSize: "13px", color: s <= review.stars ? "#f59e0b" : "#ddd" }}>★</span>
-                  ))}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                  <div style={{ display: "flex", gap: "1px" }}>
+                    {[1,2,3,4,5].map(s => (
+                      <span key={s} style={{ fontSize: "13px", color: s <= review.stars ? "#534AB7" : "#ddd" }}>✦</span>
+                    ))}
+                  </div>
+                  {review.resolution_status === "resolved" && (
+                    <div style={{ background: "#EAF3DE", color: "#3B6D11", fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "10px" }}>✓ Resolved</div>
+                  )}
                 </div>
               </div>
               <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.6" }}>{review.text}</div>
