@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import Link from "next/link"
 import { createClient } from "@supabase/supabase-js"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -39,11 +39,15 @@ function ReviewForm() {
   const [text, setText] = useState("")
   const [contextTag, setContextTag] = useState("")
   const [isFirstVisit, setIsFirstVisit] = useState<boolean | null>(null)
+  const [mediaFiles, setMediaFiles] = useState<File[]>([])
+  const [mediaUrls, setMediaUrls] = useState<string[]>([])
+  const [uploadingMedia, setUploadingMedia] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submittedStars, setSubmittedStars] = useState(0)
   const [error, setError] = useState("")
   const [search, setSearch] = useState("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
   const bizId = searchParams.get("business")
@@ -68,6 +72,35 @@ function ReviewForm() {
     })
   }, [bizId])
 
+  async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    if (mediaFiles.length + files.length > 10) {
+      setError("Maximum 10 photos/videos allowed")
+      return
+    }
+    setUploadingMedia(true)
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    const uploadedUrls: string[] = []
+    for (const file of files) {
+      const ext = file.name.split(".").pop()
+      const fileName = `reviews/${user.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const { error } = await supabase.storage.from("reviu-media").upload(fileName, file, { upsert: true })
+      if (!error) {
+        const { data: urlData } = supabase.storage.from("reviu-media").getPublicUrl(fileName)
+        uploadedUrls.push(urlData.publicUrl)
+      }
+    }
+    setMediaFiles(prev => [...prev, ...files])
+    setMediaUrls(prev => [...prev, ...uploadedUrls])
+    setUploadingMedia(false)
+  }
+
+  function removeMedia(index: number) {
+    setMediaFiles(prev => prev.filter((_, i) => i !== index))
+    setMediaUrls(prev => prev.filter((_, i) => i !== index))
+  }
+
   const tags = selectedBiz ? contextTags[selectedBiz.category] || contextTags.default : contextTags.default
   const prompt = selectedBiz ? reviewPrompts[selectedBiz.category] || reviewPrompts.default : reviewPrompts.default
 
@@ -91,15 +124,13 @@ function ReviewForm() {
     const isPending = stars <= 3
     const canUpgrade = stars === 4
 
-    // Get reviewer's past review count
     const { count } = await supabase
       .from("reviews")
       .select("id", { count: "exact" })
       .eq("user_id", user.id)
       .eq("status", "published")
 
-    // Score the review with AI
-    let reviewiuScore = 50
+    let reviuScore = 50
     try {
       const scoreRes = await fetch("/api/score-review", {
         method: "POST",
@@ -110,10 +141,12 @@ function ReviewForm() {
           isFirstVisit,
           hasEngaged: false,
           reviewCount: count || 0,
+          hasMedia: mediaUrls.length > 0,
+          mediaCount: mediaUrls.length,
         }),
       })
       const scoreData = await scoreRes.json()
-      if (scoreData.total) reviewiuScore = scoreData.total
+      if (scoreData.total) reviuScore = scoreData.total
     } catch (e) {
       console.error("Scoring failed", e)
     }
@@ -131,7 +164,8 @@ function ReviewForm() {
       status: isPending ? "pending" : "published",
       can_upgrade: canUpgrade,
       pending_expires_at: isPending ? new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString() : null,
-      legitimacy_score: reviewiuScore,
+      legitimacy_score: reviuScore,
+      media_urls: mediaUrls,
     })
 
     if (error) {
@@ -157,16 +191,11 @@ function ReviewForm() {
       </div>
       <div style={{ fontSize: "14px", color: "#888", marginBottom: "16px", lineHeight: "1.6" }}>
         {submittedStars <= 3
-          ? "The business has 72 hours to reach out and make it right. If resolved, you can upgrade your rating. Otherwise it goes public automatically."
+          ? "The business has 72 hours to reach out and make it right."
           : submittedStars === 4
-          ? "Your 4 ✦ review is live. If the business reaches out and resolves any concerns, you have the option to upgrade it to 5 ✦."
-          : "Your 5 ✦ review is live on Reviu. Thank you for helping others discover great businesses!"}
+          ? "Your 4 ✦ review is live."
+          : "Your 5 ✦ review is live on Reviu. Thank you!"}
       </div>
-      {submittedStars <= 3 && (
-        <div style={{ background: "#FAEEDA", borderRadius: "12px", padding: "12px 16px", marginBottom: "20px", fontSize: "13px", color: "#854F0B", lineHeight: "1.6", width: "100%", textAlign: "left" }}>
-          <strong>How the 72hr window works:</strong> The business sees your review privately and can message you to resolve the issue. If they make it right, you can upgrade your rating. If 72 hours pass with no resolution, your review posts exactly as written.
-        </div>
-      )}
       <Link href="/" style={{ display: "block", background: "#534AB7", color: "white", padding: "14px 32px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textDecoration: "none", marginBottom: "12px", width: "100%", textAlign: "center" }}>
         Back to home
       </Link>
@@ -255,6 +284,38 @@ function ReviewForm() {
             </div>
 
             <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", marginBottom: "12px", border: "1px solid #eee" }}>
+              <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "12px" }}>Photos & videos</div>
+              {mediaUrls.length > 0 && (
+                <div style={{ display: "flex", gap: "8px", overflowX: "auto", marginBottom: "12px", paddingBottom: "4px" }}>
+                  {mediaUrls.map((url, i) => (
+                    <div key={i} style={{ position: "relative", flexShrink: 0 }}>
+                      {mediaFiles[i]?.type.startsWith("video") ? (
+                        <video src={url} style={{ width: "80px", height: "80px", objectFit: "cover", borderRadius: "10px" }} />
+                      ) : (
+                        <img src={url} alt={`Media ${i+1}`} style={{ width: "80px", height: "80px", objectFit: "cover", borderRadius: "10px" }} />
+                      )}
+                      <div onClick={() => removeMedia(i)} style={{ position: "absolute", top: "4px", right: "4px", background: "rgba(0,0,0,0.6)", color: "white", width: "20px", height: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "11px" }}>✕</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {mediaUrls.length < 10 && (
+                <div onClick={() => fileInputRef.current?.click()} style={{ border: "2px dashed #e5e5e5", borderRadius: "12px", padding: "1.5rem", textAlign: "center", cursor: "pointer", background: "#f7f7f5" }}>
+                  {uploadingMedia ? (
+                    <div style={{ color: "#888", fontSize: "13px" }}>Uploading...</div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: "28px", marginBottom: "6px" }}>📸</div>
+                      <div style={{ fontSize: "13px", fontWeight: "600", color: "#534AB7" }}>Add photos or videos</div>
+                      <div style={{ fontSize: "11px", color: "#aaa", marginTop: "4px" }}>{mediaUrls.length}/10 · Boosts your Reviu Score</div>
+                    </>
+                  )}
+                </div>
+              )}
+              <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple onChange={handleMediaUpload} style={{ display: "none" }} />
+            </div>
+
+            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", marginBottom: "12px", border: "1px solid #eee" }}>
               <div style={{ fontSize: "14px", fontWeight: "600", marginBottom: "12px" }}>Was this your first visit?</div>
               <div style={{ display: "flex", gap: "8px" }}>
                 <div onClick={() => setIsFirstVisit(true)} style={{ flex: 1, padding: "12px", borderRadius: "12px", border: isFirstVisit === true ? "2px solid #534AB7" : "1px solid #eee", background: isFirstVisit === true ? "#EEEDFE" : "#f7f7f5", cursor: "pointer", textAlign: "center" }}>
@@ -269,7 +330,7 @@ function ReviewForm() {
             </div>
 
             <div style={{ background: "#EEEDFE", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", fontSize: "13px", color: "#3C3489", lineHeight: "1.6" }}>
-              ✦ <strong>Reviu Score:</strong> Your review is automatically scored for legitimacy based on the detail and context you provide. Be honest and specific — it matters.
+              ✦ <strong>Reviu Score:</strong> Your review is automatically scored for legitimacy. Photos and videos boost your score.
             </div>
 
             {error && <div style={{ background: "#FCEBEB", color: "#A32D2D", padding: "12px 16px", borderRadius: "10px", fontSize: "13px", marginBottom: "12px" }}>{error}</div>}

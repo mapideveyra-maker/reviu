@@ -7,7 +7,7 @@ const client = new Anthropic({
 
 export async function POST(request: Request) {
   try {
-    const { reviewText, contextTag, isFirstVisit, hasEngaged, reviewCount } = await request.json()
+    const { reviewText, contextTag, isFirstVisit, hasEngaged, reviewCount, hasMedia, mediaCount } = await request.json()
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-5",
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "user",
-          content: `You are scoring a restaurant or business review for legitimacy on Reviu, a review platform. Score this review based on how well it covers these four dimensions of a real experience:
+          content: `You are scoring a restaurant or business review for legitimacy on Reviu. Score this review based on how well it covers these four dimensions:
 
 1. FOOD - Does it mention specific details about the food, dishes, ingredients, taste, presentation?
 2. SERVICE - Does it mention how they were treated, staff behavior, attentiveness?
@@ -41,13 +41,14 @@ Return ONLY a JSON object with no explanation, no markdown, no backticks:
     const clean = text.replace(/```json|```/g, "").trim()
     const scores = JSON.parse(clean)
 
-    // Add bonus points for context and engagement
     let bonus = 0
     if (contextTag) bonus += 5
     if (isFirstVisit !== null && isFirstVisit !== undefined) bonus += 5
     if (hasEngaged) bonus += 10
     if (reviewCount > 5) bonus += 5
     if (reviewCount > 20) bonus += 5
+    if (hasMedia) bonus += 10
+    if (mediaCount >= 3) bonus += 5
 
     const finalScore = Math.min(100, scores.total + bonus)
 
