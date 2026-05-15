@@ -2,7 +2,7 @@
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { createClient } from "@supabase/supabase-js"
-import { useRouter } from "next/navigation"
+import ReviButton from "./ReviButton"
 
 const categoryPhotos: Record<string, string> = {
   "Fine Dining": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80",
@@ -32,7 +32,6 @@ export default function Home() {
   const [activity, setActivity] = useState<Record<string, number>>({})
   const [activeFilter, setActiveFilter] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
 
   useEffect(() => {
     const supabase = createClient(
@@ -88,67 +87,25 @@ export default function Home() {
       </div>
 
       <div style={{ padding: "1rem 0 0", position: "relative" }}>
-        <div style={{
-          display: "flex",
-          gap: "8px",
-          overflowX: "auto",
-          paddingBottom: "4px",
-          paddingLeft: "1.25rem",
-          paddingRight: "2.5rem",
-          scrollbarWidth: "none",
-        } as any}>
+        <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px", paddingLeft: "1.25rem", paddingRight: "2.5rem", scrollbarWidth: "none" } as any}>
           <div
             onClick={() => setActiveFilter(null)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "7px 14px",
-              borderRadius: "20px",
-              background: activeFilter === null ? "#534AB7" : "white",
-              border: activeFilter === null ? "1px solid #534AB7" : "1px solid #e8e8e8",
-              whiteSpace: "nowrap",
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
+            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "20px", background: activeFilter === null ? "#534AB7" : "white", border: activeFilter === null ? "1px solid #534AB7" : "1px solid #e8e8e8", whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0 }}
           >
             <span style={{ fontSize: "12px", fontWeight: "600", color: activeFilter === null ? "white" : "#444" }}>All</span>
           </div>
-
           {moodFilters.map(mood => (
             <div
               key={mood.label}
               onClick={() => setActiveFilter(activeFilter === mood.label ? null : mood.label)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "7px 14px",
-                borderRadius: "20px",
-                background: activeFilter === mood.label ? "#534AB7" : "white",
-                border: activeFilter === mood.label ? "1px solid #534AB7" : "1px solid #e8e8e8",
-                whiteSpace: "nowrap",
-                cursor: "pointer",
-                flexShrink: 0,
-              }}
+              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "20px", background: activeFilter === mood.label ? "#534AB7" : "white", border: activeFilter === mood.label ? "1px solid #534AB7" : "1px solid #e8e8e8", whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0 }}
             >
               <span style={{ fontSize: "14px" }}>{mood.icon}</span>
               <span style={{ fontSize: "12px", fontWeight: "500", color: activeFilter === mood.label ? "white" : "#444" }}>{mood.label}</span>
-              {activeFilter === mood.label && (
-                <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)", marginLeft: "2px" }}>✕</span>
-              )}
             </div>
           ))}
         </div>
-        <div style={{
-          position: "absolute",
-          right: 0,
-          top: "1rem",
-          bottom: 0,
-          width: "48px",
-          background: "linear-gradient(to right, rgba(247,247,245,0), rgba(247,247,245,1))",
-          pointerEvents: "none",
-        }} />
+        <div style={{ position: "absolute", right: 0, top: "1rem", bottom: 0, width: "48px", background: "linear-gradient(to right, rgba(247,247,245,0), rgba(247,247,245,1))", pointerEvents: "none" }} />
       </div>
 
       {specials.length > 0 && !activeFilter && (
@@ -181,11 +138,7 @@ export default function Home() {
           </div>
           <Link href={`/business/${featured.id}`} style={{ textDecoration: "none", display: "block" }}>
             <div style={{ borderRadius: "20px", overflow: "hidden", position: "relative", height: "220px", background: "#ddd" }}>
-              <img
-                src={featured.cover_url || categoryPhotos[featured.category] || categoryPhotos.default}
-                alt={featured.name}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
+              <img src={featured.cover_url || categoryPhotos[featured.category] || categoryPhotos.default} alt={featured.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0) 30%, rgba(0,0,0,0.75) 100%)" }} />
               {featured.special_today && (
                 <div style={{ position: "absolute", top: "12px", right: "12px", background: "#534AB7", color: "white", fontSize: "10px", fontWeight: "700", padding: "4px 10px", borderRadius: "10px" }}>
@@ -213,11 +166,7 @@ export default function Home() {
             {trending.map((biz: any) => (
               <Link key={biz.id} href={`/business/${biz.id}`} style={{ textDecoration: "none", flexShrink: 0, width: "140px" }}>
                 <div style={{ borderRadius: "14px", overflow: "hidden", height: "100px", background: "#ddd", marginBottom: "8px" }}>
-                  <img
-                    src={biz.cover_url || categoryPhotos[biz.category] || categoryPhotos.default}
-                    alt={biz.name}
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                  />
+                  <img src={biz.cover_url || categoryPhotos[biz.category] || categoryPhotos.default} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 </div>
                 <div style={{ fontSize: "13px", fontWeight: "600", color: "#111", marginBottom: "2px", lineHeight: "1.3" }}>{biz.name}</div>
                 <div style={{ fontSize: "11px", color: "#888" }}>{activity[biz.id]} review{activity[biz.id] > 1 ? "s" : ""} this week</div>
@@ -244,11 +193,7 @@ export default function Home() {
           <Link key={biz.id} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "block", marginBottom: "10px" }}>
             <div style={{ background: "white", borderRadius: "16px", overflow: "hidden", border: "1px solid #eee", display: "flex", height: "88px" }}>
               <div style={{ width: "88px", flexShrink: 0, background: "#ddd" }}>
-                <img
-                  src={biz.cover_url || categoryPhotos[biz.category] || categoryPhotos.default}
-                  alt={biz.name}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
+                <img src={biz.cover_url || categoryPhotos[biz.category] || categoryPhotos.default} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               </div>
               <div style={{ padding: "12px 14px", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
                 <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px" }}>{biz.name}</div>
@@ -256,12 +201,8 @@ export default function Home() {
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <span style={{ fontSize: "12px", color: "#f59e0b" }}>{"★".repeat(Math.round(biz.google_rating || 0))}</span>
                   <span style={{ fontSize: "11px", color: "#888" }}>{biz.google_rating}</span>
-                  {biz.special_today && (
-                    <span style={{ fontSize: "10px", color: "#534AB7", background: "#EEEDFE", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Special today</span>
-                  )}
-                  {!biz.claimed && !biz.special_today && (
-                    <span style={{ fontSize: "10px", color: "#854F0B", background: "#FAEEDA", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Unclaimed</span>
-                  )}
+                  {biz.special_today && <span style={{ fontSize: "10px", color: "#534AB7", background: "#EEEDFE", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Special today</span>}
+                  {!biz.claimed && !biz.special_today && <span style={{ fontSize: "10px", color: "#854F0B", background: "#FAEEDA", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Unclaimed</span>}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", padding: "0 12px" }}>
@@ -271,6 +212,8 @@ export default function Home() {
           </Link>
         ))}
       </div>
+
+      <ReviButton />
 
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
         <div onClick={() => { setActiveFilter(null); window.scrollTo(0, 0) }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", cursor: "pointer" }}>
