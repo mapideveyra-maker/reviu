@@ -1,23 +1,12 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-
 export default function ReviButton() {
-  const [visible, setVisible] = useState(false)
-  const [pulsing, setPulsing] = useState(false)
+  const [pulsing, setPulsing] = useState(true)
   const router = useRouter()
-
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setVisible(true)
-      setTimeout(() => setPulsing(true), 500)
-      setTimeout(() => setPulsing(false), 3500)
-    }, 8000)
-    return () => clearTimeout(timer)
+    setTimeout(() => setPulsing(false), 3000)
   }, [])
-
-  if (!visible) return null
-
   return (
     <div
       onClick={() => router.push("/revi")}
@@ -42,9 +31,8 @@ export default function ReviButton() {
           color: "#534AB7",
           boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
           whiteSpace: "nowrap",
-          animation: "fadeIn 0.3s ease",
         }}>
-          Need help finding something? ✦
+          Ask Revi ✦
         </div>
       )}
       <div style={{
@@ -59,7 +47,6 @@ export default function ReviButton() {
         color: "white",
         boxShadow: "0 4px 16px rgba(83,74,183,0.4)",
         border: "3px solid white",
-        transition: "transform 0.2s",
       }}>
         ✦
       </div>
