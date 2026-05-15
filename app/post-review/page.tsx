@@ -38,7 +38,7 @@ function ReviewForm() {
   const [hover, setHover] = useState(0)
   const [text, setText] = useState("")
   const [contextTag, setContextTag] = useState("")
-  const [isFirstVisit, setIsFirstVisit] = useState(false)
+  const [isFirstVisit, setIsFirstVisit] = useState<boolean | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submittedStars, setSubmittedStars] = useState(0)
@@ -75,6 +75,7 @@ function ReviewForm() {
     if (!selectedBiz) { setError("Please select a business"); return }
     if (stars === 0) { setError("Please add a star rating"); return }
     if (!contextTag) { setError("Please select your visit context"); return }
+    if (isFirstVisit === null) { setError("Please let us know if this was your first visit"); return }
     if (text.trim().length < 10) { setError("Please write at least a sentence about your experience"); return }
 
     setSubmitting(true)
@@ -90,6 +91,33 @@ function ReviewForm() {
     const isPending = stars <= 3
     const canUpgrade = stars === 4
 
+    // Get reviewer's past review count
+    const { count } = await supabase
+      .from("reviews")
+      .select("id", { count: "exact" })
+      .eq("user_id", user.id)
+      .eq("status", "published")
+
+    // Score the review with AI
+    let reviewiuScore = 50
+    try {
+      const scoreRes = await fetch("/api/score-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewText: text.trim(),
+          contextTag,
+          isFirstVisit,
+          hasEngaged: false,
+          reviewCount: count || 0,
+        }),
+      })
+      const scoreData = await scoreRes.json()
+      if (scoreData.total) reviewiuScore = scoreData.total
+    } catch (e) {
+      console.error("Scoring failed", e)
+    }
+
     const { error } = await supabase.from("reviews").insert({
       business_id: selectedBiz.id,
       user_id: user.id,
@@ -102,6 +130,8 @@ function ReviewForm() {
       reviewer_initials: initials,
       status: isPending ? "pending" : "published",
       can_upgrade: canUpgrade,
+      pending_expires_at: isPending ? new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString() : null,
+      legitimacy_score: reviewiuScore,
     })
 
     if (error) {
@@ -129,17 +159,12 @@ function ReviewForm() {
         {submittedStars <= 3
           ? "The business has 72 hours to reach out and make it right. If resolved, you can upgrade your rating. Otherwise it goes public automatically."
           : submittedStars === 4
-          ? "Your 4-star review is live. If the business reaches out and resolves any concerns, you have the option to upgrade it to 5 stars."
-          : "Your 5-star review is live on Reviu. Thank you for helping others discover great businesses!"}
+          ? "Your 4 ✦ review is live. If the business reaches out and resolves any concerns, you have the option to upgrade it to 5 ✦."
+          : "Your 5 ✦ review is live on Reviu. Thank you for helping others discover great businesses!"}
       </div>
       {submittedStars <= 3 && (
         <div style={{ background: "#FAEEDA", borderRadius: "12px", padding: "12px 16px", marginBottom: "20px", fontSize: "13px", color: "#854F0B", lineHeight: "1.6", width: "100%", textAlign: "left" }}>
           <strong>How the 72hr window works:</strong> The business sees your review privately and can message you to resolve the issue. If they make it right, you can upgrade your rating. If 72 hours pass with no resolution, your review posts exactly as written.
-        </div>
-      )}
-      {submittedStars === 4 && (
-        <div style={{ background: "#EEEDFE", borderRadius: "12px", padding: "12px 16px", marginBottom: "20px", fontSize: "13px", color: "#3C3489", lineHeight: "1.6", width: "100%", textAlign: "left" }}>
-          <strong>4-star upgrade option:</strong> If the business reaches out and exceeds your expectations, you can upgrade this to a 5-star review from your profile.
         </div>
       )}
       <Link href="/" style={{ display: "block", background: "#534AB7", color: "white", padding: "14px 32px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textDecoration: "none", marginBottom: "12px", width: "100%", textAlign: "center" }}>
@@ -230,25 +255,27 @@ function ReviewForm() {
             </div>
 
             <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", marginBottom: "12px", border: "1px solid #eee" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontSize: "14px", fontWeight: "600" }}>First time visiting?</div>
-                  <div style={{ fontSize: "12px", color: "#888" }}>Helps others know if this is a first impression</div>
+              <div style={{ fontSize: "14px", fontWeight: "600", marginBottom: "12px" }}>Was this your first visit?</div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <div onClick={() => setIsFirstVisit(true)} style={{ flex: 1, padding: "12px", borderRadius: "12px", border: isFirstVisit === true ? "2px solid #534AB7" : "1px solid #eee", background: isFirstVisit === true ? "#EEEDFE" : "#f7f7f5", cursor: "pointer", textAlign: "center" }}>
+                  <div style={{ fontSize: "20px", marginBottom: "4px" }}>🆕</div>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: isFirstVisit === true ? "#534AB7" : "#555" }}>First visit</div>
                 </div>
-                <div onClick={() => setIsFirstVisit(!isFirstVisit)} style={{ width: "48px", height: "28px", borderRadius: "14px", background: isFirstVisit ? "#534AB7" : "#ddd", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
-                  <div style={{ width: "22px", height: "22px", borderRadius: "50%", background: "white", position: "absolute", top: "3px", left: isFirstVisit ? "23px" : "3px", transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
+                <div onClick={() => setIsFirstVisit(false)} style={{ flex: 1, padding: "12px", borderRadius: "12px", border: isFirstVisit === false ? "2px solid #534AB7" : "1px solid #eee", background: isFirstVisit === false ? "#EEEDFE" : "#f7f7f5", cursor: "pointer", textAlign: "center" }}>
+                  <div style={{ fontSize: "20px", marginBottom: "4px" }}>🔄</div>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: isFirstVisit === false ? "#534AB7" : "#555" }}>Been before</div>
                 </div>
               </div>
             </div>
 
             <div style={{ background: "#EEEDFE", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", fontSize: "13px", color: "#3C3489", lineHeight: "1.6" }}>
-              ✦ <strong>Reviu Score:</strong> Your review and account history are used to calculate your Reviu Score — a measure of how legitimate and trustworthy your reviews are.
+              ✦ <strong>Reviu Score:</strong> Your review is automatically scored for legitimacy based on the detail and context you provide. Be honest and specific — it matters.
             </div>
 
             {error && <div style={{ background: "#FCEBEB", color: "#A32D2D", padding: "12px 16px", borderRadius: "10px", fontSize: "13px", marginBottom: "12px" }}>{error}</div>}
 
             <div onClick={handleSubmit} style={{ background: submitting ? "#9990D9" : "#534AB7", color: "white", padding: "16px", borderRadius: "14px", fontSize: "15px", fontWeight: "600", textAlign: "center", cursor: submitting ? "not-allowed" : "pointer" }}>
-              {submitting ? "Submitting..." : "Submit review"}
+              {submitting ? "Scoring and submitting..." : "Submit review"}
             </div>
           </>
         )}

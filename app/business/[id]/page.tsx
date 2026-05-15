@@ -47,7 +47,7 @@ async function getReviews(businessId: string) {
     .select("*")
     .eq("business_id", businessId)
     .eq("status", "published")
-    .order("created_at", { ascending: false })
+    .order("legitimacy_score", { ascending: false })
   return data || []
 }
 
@@ -58,6 +58,13 @@ function hexToRgb(hex: string) {
     g: parseInt(result[2], 16),
     b: parseInt(result[3], 16)
   } : { r: 83, g: 74, b: 183 }
+}
+
+function getScoreColor(score: number) {
+  if (score >= 80) return "#3B6D11"
+  if (score >= 60) return "#534AB7"
+  if (score >= 40) return "#854F0B"
+  return "#888"
 }
 
 export default async function BusinessProfile({ params }: { params: Promise<{ id: string }> }) {
@@ -133,10 +140,10 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
             <div style={{ display: "flex", alignItems: "center", gap: "4px", background: accentMedium, padding: "5px 12px", borderRadius: "20px", border: `1px solid ${accentBorder}` }}>
               <span style={{ color: "#534AB7", fontSize: "14px" }}>{"✦".repeat(Math.round(Number(avgReviuRating)))}</span>
               <span style={{ fontSize: "13px", fontWeight: "700", color: accent }}>{avgReviuRating}</span>
-              <span style={{ fontSize: "11px", color: "#888" }}>Reviu ({reviews.length})</span>
+              <span style={{ fontSize: "11px", color: "#888" }}>({reviews.length})</span>
             </div>
           ) : (
-            <div style={{ background: accentLight, color: accent, fontSize: "12px", fontWeight: "600", padding: "5px 12px", borderRadius: "20px", border: `1px solid ${accentBorder}` }}>No Reviu reviews yet</div>
+            <div style={{ background: accentLight, color: accent, fontSize: "12px", fontWeight: "600", padding: "5px 12px", borderRadius: "20px", border: `1px solid ${accentBorder}` }}>No reviews yet</div>
           )}
         </div>
 
@@ -199,7 +206,7 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
       <div style={{ background: "white", padding: "1rem 1.25rem", marginBottom: "8px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
           <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Reviu reviews {reviews.length > 0 && `(${reviews.length})`}
+            Reviews {reviews.length > 0 && `(${reviews.length})`}
           </div>
           <Link href={`/post-review?business=${id}`} style={{ fontSize: "12px", color: accent, fontWeight: "600", textDecoration: "none" }}>+ Write one</Link>
         </div>
@@ -217,7 +224,14 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
                     {review.reviewer_initials || "R"}
                   </div>
                   <div>
-                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#111" }}>{review.reviewer_name || "Reviu Member"}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <div style={{ fontSize: "14px", fontWeight: "600", color: "#111" }}>{review.reviewer_name || "Reviu Member"}</div>
+                      {review.legitimacy_score && (
+                        <div style={{ fontSize: "10px", fontWeight: "700", color: getScoreColor(review.legitimacy_score), background: review.legitimacy_score >= 80 ? "#EAF3DE" : review.legitimacy_score >= 60 ? "#EEEDFE" : "#FAEEDA", padding: "2px 6px", borderRadius: "8px" }}>
+                          ✦ {review.legitimacy_score}
+                        </div>
+                      )}
+                    </div>
                     <div style={{ fontSize: "11px", color: "#888" }}>
                       {review.context_tag && `${review.context_tag} · `}
                       {review.is_first_visit && "First visit · "}
@@ -234,15 +248,12 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
                   {review.resolution_status === "resolved" && (
                     <div style={{ background: "#EAF3DE", color: "#3B6D11", fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "10px" }}>✓ Resolved</div>
                   )}
+                  {review.resolution_status === "unresolved" && (
+                    <div style={{ background: "#FAEEDA", color: "#854F0B", fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "10px" }}>⚠ Unresolved</div>
+                  )}
                 </div>
               </div>
               <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.6" }}>{review.text}</div>
-              {review.business_response && (
-                <div style={{ background: accentLight, borderRadius: "10px", padding: "10px 12px", marginTop: "10px", border: `1px solid ${accentBorder}` }}>
-                  <div style={{ fontSize: "11px", fontWeight: "600", color: accent, marginBottom: "4px" }}>Response from {biz.name}</div>
-                  <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.5" }}>{review.business_response}</div>
-                </div>
-              )}
             </div>
           ))
         )}

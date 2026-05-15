@@ -8,6 +8,8 @@ export default function Profile() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [pendingCount, setPendingCount] = useState(0)
+  const [reviews, setReviews] = useState<any[]>([])
+  const [reviuScore, setReviuScore] = useState<number | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -18,12 +20,18 @@ export default function Profile() {
     supabase.auth.getUser().then(async ({ data }) => {
       setUser(data.user)
       if (data.user) {
-        const { data: pending } = await supabase
-          .from("reviews")
-          .select("id")
-          .eq("user_id", data.user.id)
-          .eq("status", "pending")
-        setPendingCount(pending?.length || 0)
+        const [pendingRes, reviewRes] = await Promise.all([
+          supabase.from("reviews").select("id").eq("user_id", data.user.id).eq("status", "pending"),
+          supabase.from("reviews").select("*, businesses(name)").eq("user_id", data.user.id).order("created_at", { ascending: false }),
+        ])
+        setPendingCount(pendingRes.data?.length || 0)
+        const allReviews = reviewRes.data || []
+        setReviews(allReviews)
+        const scored = allReviews.filter(r => r.legitimacy_score)
+        if (scored.length > 0) {
+          const avg = Math.round(scored.reduce((sum: number, r: any) => sum + r.legitimacy_score, 0) / scored.length)
+          setReviuScore(avg)
+        }
       }
       setLoading(false)
     })
@@ -39,9 +47,16 @@ export default function Profile() {
     router.refresh()
   }
 
+  function getScoreColor(score: number) {
+    if (score >= 80) return { color: "#3B6D11", bg: "#EAF3DE" }
+    if (score >= 60) return { color: "#534AB7", bg: "#EEEDFE" }
+    return { color: "#854F0B", bg: "#FAEEDA" }
+  }
+
   const accountType = user?.user_metadata?.account_type || "reviewer"
   const isBusinessOwner = accountType === "business"
   const isInfluencer = accountType === "influencer"
+  const publishedReviews = reviews.filter(r => r.status === "published")
 
   if (loading) return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -99,16 +114,20 @@ export default function Profile() {
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
-          {[
-            { label: "Reviews", value: "0" },
-            { label: "Reviu Score", value: "—" },
-            { label: "Helpful votes", value: "0" },
-          ].map(stat => (
-            <div key={stat.label} style={{ background: "#f7f7f5", borderRadius: "10px", padding: "10px", textAlign: "center" }}>
-              <div style={{ fontSize: "10px", color: "#888", marginBottom: "4px" }}>{stat.label}</div>
-              <div style={{ fontSize: "16px", fontWeight: "700" }}>{stat.value}</div>
+          <div style={{ background: "#f7f7f5", borderRadius: "10px", padding: "10px", textAlign: "center" }}>
+            <div style={{ fontSize: "10px", color: "#888", marginBottom: "4px" }}>Reviews</div>
+            <div style={{ fontSize: "16px", fontWeight: "700" }}>{publishedReviews.length}</div>
+          </div>
+          <div style={{ background: reviuScore ? (getScoreColor(reviuScore).bg) : "#f7f7f5", borderRadius: "10px", padding: "10px", textAlign: "center" }}>
+            <div style={{ fontSize: "10px", color: "#888", marginBottom: "4px" }}>Reviu Score</div>
+            <div style={{ fontSize: "16px", fontWeight: "700", color: reviuScore ? getScoreColor(reviuScore).color : "#888" }}>
+              {reviuScore ? `✦ ${reviuScore}` : "—"}
             </div>
-          ))}
+          </div>
+          <div style={{ background: "#f7f7f5", borderRadius: "10px", padding: "10px", textAlign: "center" }}>
+            <div style={{ fontSize: "10px", color: "#888", marginBottom: "4px" }}>Helpful votes</div>
+            <div style={{ fontSize: "16px", fontWeight: "700" }}>0</div>
+          </div>
         </div>
       </div>
 
@@ -131,12 +150,40 @@ export default function Profile() {
 
       <div style={{ background: "white", padding: "1.25rem", marginBottom: "8px" }}>
         <div style={{ fontSize: "13px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "12px" }}>My reviews</div>
-        <div style={{ fontSize: "13px", color: "#aaa", textAlign: "center", padding: "1.5rem 0", background: "#f7f7f5", borderRadius: "12px" }}>
-          No published reviews yet — go explore some businesses!
-        </div>
-        <Link href="/" style={{ display: "block", background: "#534AB7", color: "white", padding: "12px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginTop: "12px" }}>
-          Browse businesses
-        </Link>
+        {publishedReviews.length === 0 ? (
+          <>
+            <div style={{ fontSize: "13px", color: "#aaa", textAlign: "center", padding: "1.5rem 0", background: "#f7f7f5", borderRadius: "12px" }}>
+              No published reviews yet — go explore some businesses!
+            </div>
+            <Link href="/" style={{ display: "block", background: "#534AB7", color: "white", padding: "12px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginTop: "12px" }}>
+              Browse businesses
+            </Link>
+          </>
+        ) : (
+          publishedReviews.map(review => (
+            <div key={review.id} style={{ paddingBottom: "14px", marginBottom: "14px", borderBottom: "1px solid #f5f5f5" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+                <div style={{ fontSize: "14px", fontWeight: "600", color: "#111" }}>{review.businesses?.name}</div>
+                <div style={{ display: "flex", gap: "1px" }}>
+                  {[1,2,3,4,5].map(s => (
+                    <span key={s} style={{ fontSize: "12px", color: s <= review.stars ? "#534AB7" : "#ddd" }}>✦</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ fontSize: "12px", color: "#888", marginBottom: "6px" }}>
+                {review.context_tag && `${review.context_tag} · `}
+                {new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                {review.resolution_status === "resolved" && <span style={{ color: "#3B6D11", fontWeight: "600" }}> · ✓ Resolved</span>}
+              </div>
+              <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.5" }}>{review.text}</div>
+              {review.legitimacy_score && (
+                <div style={{ marginTop: "6px", fontSize: "11px", color: getScoreColor(review.legitimacy_score).color, fontWeight: "600" }}>
+                  ✦ Reviu Score: {review.legitimacy_score}
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {isBusinessOwner && (
