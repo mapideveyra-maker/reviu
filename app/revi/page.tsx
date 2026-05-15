@@ -1,6 +1,7 @@
 "use client"
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
+import { createClient } from "@supabase/supabase-js"
 
 const REVI_PERSONALITY = `You are Revi, the friendly AI assistant for Reviu - a review platform for Cincinnati businesses. You help people discover great local restaurants, businesses and experiences in Cincinnati.
 
@@ -21,7 +22,9 @@ Your personality:
 - Honest about what you know and don't know
 - You love Cincinnati and know the food scene well
 
-When someone asks for recommendations give 2-3 specific suggestions with a brief reason why. Always mention the context - date night, quick lunch, celebration etc.`
+When someone asks for recommendations give 2-3 specific suggestions with a brief reason why. Always mention the context - date night, quick lunch, celebration etc.
+
+When you have personal context about the user, use it naturally to give personalized recommendations. Don't mention that you're using their data — just make it feel like you know them well.`
 
 interface Message {
   role: "user" | "assistant"
@@ -42,11 +45,22 @@ export default function ReviChat() {
   ])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+
+  useEffect(() => {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setUserId(data.user.id)
+    })
+  }, [])
 
   async function sendMessage(text: string) {
     if (!text.trim() || loading) return
@@ -62,6 +76,7 @@ export default function ReviChat() {
         body: JSON.stringify({
           messages: [...messages, userMessage],
           system: REVI_PERSONALITY,
+          userId,
         }),
       })
       const data = await response.json()
@@ -112,7 +127,7 @@ export default function ReviChat() {
             <div style={{ background: "white", padding: "10px 14px", borderRadius: "18px 18px 18px 4px", boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
               <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
                 {[0,1,2].map(i => (
-                  <div key={i} style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#534AB7", opacity: 0.5, animation: `pulse 1s ease-in-out ${i * 0.2}s infinite` }} />
+                  <div key={i} style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#534AB7", opacity: 0.5 }} />
                 ))}
               </div>
             </div>
