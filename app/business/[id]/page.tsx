@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
 import TrackView from "../../TrackView"
 import ReviewsList from "../../ReviewsList"
+import BackButton from "../../BackButton"
+import DirectionsButton from "../../DirectionsButton"
 
 async function getBusiness(id: string) {
   const supabase = createClient(
@@ -68,9 +70,8 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
   if (!biz) return <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>Business not found</div>
 
   const isBusinessOwner = user?.user_metadata?.account_type === "business" && user?.id === biz.owner_id
-  const lat = biz.latitude || 39.1031
-  const lng = biz.longitude || -84.5120
-  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(biz.name + " " + biz.address + " " + biz.city)}`
+  const lat = parseFloat(biz.latitude) || 39.1031
+  const lng = parseFloat(biz.longitude) || -84.5120
   const accent = biz.brand_color || "#534AB7"
   const rgb = hexToRgb(accent)
   const accentLight = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.06)`
@@ -95,14 +96,14 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
       <div style={{ position: "relative", marginBottom: "0" }}>
         <div style={{ height: "260px", position: "relative" }}>
           <iframe
-            src={`https://maps.google.com/maps?q=${lat},${lng}&z=16&output=embed`}
+            src={`https://maps.google.com/maps?q=${lat},${lng}&z=16&output=embed&gestureHandling=none`}
             width="100%"
             height="100%"
-            style={{ border: "none", filter: "saturate(1.1)", display: "block" }}
+            style={{ border: "none", filter: "saturate(1.1)", display: "block", pointerEvents: "none" }}
             loading="lazy"
           />
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.5) 100%)", pointerEvents: "none" }} />
-          <Link href="/" style={{ position: "absolute", top: "16px", left: "16px", width: "36px", height: "36px", background: "white", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", fontSize: "16px", boxShadow: "0 2px 8px rgba(0,0,0,0.2)", zIndex: 20 }}>←</Link>
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, pointerEvents: "none" }} />
+          <BackButton />
           {biz.music_url && (
             <div style={{ position: "absolute", top: "16px", right: "16px", background: "rgba(0,0,0,0.4)", color: "white", fontSize: "11px", padding: "4px 10px", borderRadius: "20px", zIndex: 20 }}>
               🎵 {biz.music_title || "Now playing"}
@@ -145,17 +146,21 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "8px", marginBottom: "16px" }}>
-          {[
-            { icon: "📞", label: "Call", href: `tel:${biz.phone}` },
-            { icon: "🗺", label: "Directions", href: directionsUrl },
-            { icon: "🌐", label: "Website", href: biz.website ? `https://${biz.website}` : "#" },
-            { icon: "📅", label: "Reserve", href: biz.booking_url || "#" },
-          ].map(action => (
-            <a key={action.label} href={action.href} target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "10px 6px", background: accentMedium, borderRadius: "12px", textDecoration: "none", border: `1px solid ${accentBorder}` }}>
-              <span style={{ fontSize: "20px" }}>{action.icon}</span>
-              <span style={{ fontSize: "11px", color: accent, fontWeight: "600" }}>{action.label}</span>
-            </a>
-          ))}
+          <a href={`tel:${biz.phone}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "10px 6px", background: accentMedium, borderRadius: "12px", textDecoration: "none", border: `1px solid ${accentBorder}` }}>
+            <span style={{ fontSize: "20px" }}>📞</span>
+            <span style={{ fontSize: "11px", color: accent, fontWeight: "600" }}>Call</span>
+          </a>
+          <div style={{ background: accentMedium, borderRadius: "12px", border: `1px solid ${accentBorder}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <DirectionsButton name={biz.name} address={biz.address || ""} city={biz.city || ""} state={biz.state || ""} lat={lat} lng={lng} />
+          </div>
+          <a href={biz.website ? `https://${biz.website}` : "#"} target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "10px 6px", background: accentMedium, borderRadius: "12px", textDecoration: "none", border: `1px solid ${accentBorder}` }}>
+            <span style={{ fontSize: "20px" }}>🌐</span>
+            <span style={{ fontSize: "11px", color: accent, fontWeight: "600" }}>Website</span>
+          </a>
+          <a href={biz.booking_url || "#"} target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "10px 6px", background: accentMedium, borderRadius: "12px", textDecoration: "none", border: `1px solid ${accentBorder}` }}>
+            <span style={{ fontSize: "20px" }}>📅</span>
+            <span style={{ fontSize: "11px", color: accent, fontWeight: "600" }}>Reserve</span>
+          </a>
         </div>
 
         {biz.address && (
@@ -237,13 +242,6 @@ export default async function BusinessProfile({ params }: { params: Promise<{ id
           </Link>
         </div>
       )}
-
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: `2px solid ${accent}`, display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
-        <Link href="/" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊞</span><span style={{ fontSize: "11px", color: "#888" }}>Home</span></Link>
-        <Link href="/post-review" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊕</span><span style={{ fontSize: "11px", color: "#888" }}>Review</span></Link>
-        <Link href="/influencers" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>✦</span><span style={{ fontSize: "11px", color: "#888" }}>Influencers</span></Link>
-        <Link href="/profile" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>◯</span><span style={{ fontSize: "11px", color: "#888" }}>Profile</span></Link>
-      </div>
     </main>
   )
 }

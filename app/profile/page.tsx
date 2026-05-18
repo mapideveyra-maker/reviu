@@ -1,6 +1,6 @@
 "use client"
 import Link from "next/link"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createClient } from "@supabase/supabase-js"
 import { useRouter } from "next/navigation"
 
@@ -10,6 +10,8 @@ export default function Profile() {
   const [pendingCount, setPendingCount] = useState(0)
   const [reviews, setReviews] = useState<any[]>([])
   const [reviuScore, setReviuScore] = useState<number | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -37,13 +39,26 @@ export default function Profile() {
     })
   }, [])
 
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    setUploadingPhoto(true)
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    const ext = file.name.split(".").pop()
+    const fileName = `profiles/${user.id}.${ext}`
+    const { error } = await supabase.storage.from("reviu-media").upload(fileName, file, { upsert: true })
+    if (!error) {
+      const { data: urlData } = supabase.storage.from("reviu-media").getPublicUrl(fileName)
+      await supabase.auth.updateUser({ data: { ...user.user_metadata, profile_photo_url: urlData.publicUrl } })
+      setUser((prev: any) => ({ ...prev, user_metadata: { ...prev.user_metadata, profile_photo_url: urlData.publicUrl } }))
+    }
+    setUploadingPhoto(false)
+  }
+
   async function handleSignOut() {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
     await supabase.auth.signOut()
-    router.push("/")
+    router.push("/signup")
     router.refresh()
   }
 
@@ -57,37 +72,11 @@ export default function Profile() {
   const isBusinessOwner = accountType === "business"
   const isInfluencer = accountType === "influencer"
   const publishedReviews = reviews.filter(r => r.status === "published")
+  const profilePhoto = user?.user_metadata?.profile_photo_url
 
   if (loading) return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ color: "#888", fontSize: "14px" }}>Loading...</div>
-    </div>
-  )
-
-  if (!user) return (
-    <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
-      <div style={{ background: "#534AB7", padding: "1rem 1.25rem" }}>
-        <span style={{ fontSize: "18px", fontWeight: "700", color: "white" }}>My Profile</span>
-      </div>
-      <div style={{ padding: "3rem 1.25rem", textAlign: "center" }}>
-        <div style={{ fontSize: "48px", marginBottom: "16px" }}>👋</div>
-        <div style={{ fontSize: "22px", fontWeight: "700", marginBottom: "8px" }}>Join Reviu</div>
-        <div style={{ fontSize: "14px", color: "#888", marginBottom: "32px", lineHeight: "1.6" }}>
-          Sign up to leave reviews, connect with businesses, and join the fairest review platform around.
-        </div>
-        <Link href="/signup" style={{ display: "block", background: "#534AB7", color: "white", padding: "16px", borderRadius: "14px", fontSize: "15px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginBottom: "12px" }}>
-          Create free account
-        </Link>
-        <Link href="/login" style={{ display: "block", background: "white", color: "#534AB7", padding: "16px", borderRadius: "14px", fontSize: "15px", fontWeight: "600", textAlign: "center", textDecoration: "none", border: "1px solid #534AB7" }}>
-          Sign in
-        </Link>
-      </div>
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
-        <Link href="/" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊞</span><span style={{ fontSize: "11px", color: "#888" }}>Home</span></Link>
-        <Link href="/post-review" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊕</span><span style={{ fontSize: "11px", color: "#888" }}>Review</span></Link>
-        <Link href="/influencers" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>✦</span><span style={{ fontSize: "11px", color: "#888" }}>Influencers</span></Link>
-        <Link href="/profile" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>◯</span><span style={{ fontSize: "11px", color: "#534AB7", fontWeight: "600" }}>Profile</span></Link>
-      </div>
     </div>
   )
 
@@ -100,14 +89,24 @@ export default function Profile() {
 
       <div style={{ background: "white", padding: "1.25rem", marginBottom: "8px" }}>
         <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "16px" }}>
-          <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", fontWeight: "700", color: "#534AB7", flexShrink: 0 }}>
-            {user.email?.slice(0, 2).toUpperCase()}
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", fontWeight: "700", color: "#534AB7", overflow: "hidden" }}>
+              {profilePhoto ? (
+                <img src={profilePhoto} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                user?.email?.slice(0, 2).toUpperCase()
+              )}
+            </div>
+            <div onClick={() => fileInputRef.current?.click()} style={{ position: "absolute", bottom: 0, right: 0, width: "24px", height: "24px", borderRadius: "50%", background: "#534AB7", border: "2px solid white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "12px" }}>
+              {uploadingPhoto ? "..." : "+"}
+            </div>
+            <input ref={fileInputRef} type="file" accept="image/*" capture="user" onChange={handlePhotoChange} style={{ display: "none" }} />
           </div>
           <div>
             <div style={{ fontSize: "18px", fontWeight: "700", marginBottom: "2px" }}>
-              {user.user_metadata?.full_name || "Reviu Member"}
+              {user?.user_metadata?.full_name || "Reviu Member"}
             </div>
-            <div style={{ fontSize: "13px", color: "#888", marginBottom: "8px" }}>{user.email}</div>
+            <div style={{ fontSize: "13px", color: "#888", marginBottom: "8px" }}>{user?.email}</div>
             <div style={{ display: "inline-block", background: "#EAF3DE", color: "#3B6D11", fontSize: "11px", fontWeight: "700", padding: "3px 10px", borderRadius: "20px" }}>
               {isBusinessOwner ? "Business Owner" : isInfluencer ? "Creator" : "Verified Reviewer"}
             </div>
@@ -118,7 +117,7 @@ export default function Profile() {
             <div style={{ fontSize: "10px", color: "#888", marginBottom: "4px" }}>Reviews</div>
             <div style={{ fontSize: "16px", fontWeight: "700" }}>{publishedReviews.length}</div>
           </div>
-          <div style={{ background: reviuScore ? (getScoreColor(reviuScore).bg) : "#f7f7f5", borderRadius: "10px", padding: "10px", textAlign: "center" }}>
+          <div style={{ background: reviuScore ? getScoreColor(reviuScore).bg : "#f7f7f5", borderRadius: "10px", padding: "10px", textAlign: "center" }}>
             <div style={{ fontSize: "10px", color: "#888", marginBottom: "4px" }}>Reviu Score</div>
             <div style={{ fontSize: "16px", fontWeight: "700", color: reviuScore ? getScoreColor(reviuScore).color : "#888" }}>
               {reviuScore ? `✦ ${reviuScore}` : "—"}
@@ -155,7 +154,7 @@ export default function Profile() {
             <div style={{ fontSize: "13px", color: "#aaa", textAlign: "center", padding: "1.5rem 0", background: "#f7f7f5", borderRadius: "12px" }}>
               No published reviews yet — go explore some businesses!
             </div>
-            <Link href="/" style={{ display: "block", background: "#534AB7", color: "white", padding: "12px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginTop: "12px" }}>
+            <Link href="/reviews" style={{ display: "block", background: "#534AB7", color: "white", padding: "12px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", textDecoration: "none", marginTop: "12px" }}>
               Browse businesses
             </Link>
           </>
@@ -237,13 +236,6 @@ export default function Profile() {
           <div style={{ fontSize: "14px", fontWeight: "500", color: "#A32D2D" }}>Sign out</div>
           <span style={{ color: "#ccc", fontSize: "16px" }}>›</span>
         </div>
-      </div>
-
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
-        <Link href="/" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊞</span><span style={{ fontSize: "11px", color: "#888" }}>Home</span></Link>
-        <Link href="/post-review" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊕</span><span style={{ fontSize: "11px", color: "#888" }}>Review</span></Link>
-        <Link href="/influencers" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>✦</span><span style={{ fontSize: "11px", color: "#888" }}>Influencers</span></Link>
-        <Link href="/profile" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>◯</span><span style={{ fontSize: "11px", color: "#534AB7", fontWeight: "600" }}>Profile</span></Link>
       </div>
     </div>
   )

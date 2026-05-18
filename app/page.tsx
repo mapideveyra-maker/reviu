@@ -2,8 +2,6 @@
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { createClient } from "@supabase/supabase-js"
-import ReviButton from "./ReviButton"
-import MediaViewer from "./MediaViewer"
 
 const categoryPhotos: Record<string, string> = {
   "Fine Dining": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80",
@@ -30,12 +28,12 @@ function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
 }
 
 export default function Home() {
-  const [businesses, setBusinesses] = useState<any[]>([])
-  const [recentReviews, setRecentReviews] = useState<any[]>([])
+  const [feedItems, setFeedItems] = useState<any[]>([])
   const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null)
   const [locationError, setLocationError] = useState(false)
   const [radius, setRadius] = useState(3)
   const [loading, setLoading] = useState(true)
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -57,25 +55,44 @@ export default function Home() {
       supabase.from("businesses").select("*"),
       supabase.from("reviews").select("*, businesses(name, latitude, longitude, category, cover_url)").eq("status", "published").order("created_at", { ascending: false }).limit(50),
     ]).then(([bizRes, reviewRes]) => {
-      setBusinesses(bizRes.data || [])
-      setRecentReviews(reviewRes.data || [])
+      const allBiz = bizRes.data || []
+      const allReviews = reviewRes.data || []
+
+      const nearbyBiz = allBiz.filter(b => {
+        if (!b.latitude || !b.longitude) return true
+        return getDistance(location.lat, location.lng, parseFloat(b.latitude), parseFloat(b.longitude)) <= radius
+      })
+
+      const nearbyReviews = allReviews.filter(r => {
+        const biz = r.businesses
+        if (!biz?.latitude || !biz?.longitude) return true
+        return getDistance(location.lat, location.lng, parseFloat(biz.latitude), parseFloat(biz.longitude)) <= radius
+      })
+
+      const items: any[] = []
+
+      nearbyBiz.filter(b => b.special_today).forEach(biz => {
+        items.push({ type: "special", biz, createdAt: biz.updated_at || biz.created_at })
+      })
+
+      nearbyReviews.forEach(review => {
+        items.push({ type: "review", review, createdAt: review.created_at })
+      })
+
+      nearbyBiz.forEach(biz => {
+        items.push({ type: "business", biz, createdAt: biz.created_at })
+      })
+
+      items.sort((a, b) => {
+        const typeOrder: Record<string, number> = { special: 0, review: 1, business: 2 }
+        if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type]
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      })
+
+      setFeedItems(items)
       setLoading(false)
     })
-  }, [location])
-
-  const nearbyBusinesses = businesses.filter(b => {
-    if (!b.latitude || !b.longitude) return true
-    return getDistance(location?.lat || 39.1031, location?.lng || -84.5120, parseFloat(b.latitude), parseFloat(b.longitude)) <= radius
-  })
-
-  const nearbyReviews = recentReviews.filter(r => {
-    const biz = r.businesses
-    if (!biz?.latitude || !biz?.longitude) return true
-    return getDistance(location?.lat || 39.1031, location?.lng || -84.5120, parseFloat(biz.latitude), parseFloat(biz.longitude)) <= radius
-  })
-
-  const specials = nearbyBusinesses.filter(b => b.special_today)
-  const reviewsWithPhotos = nearbyReviews.filter(r => r.media_urls?.length > 0)
+  }, [location, radius])
 
   if (loading) return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -88,6 +105,13 @@ export default function Home() {
 
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
+
+      {selectedPhoto && (
+        <div onClick={() => setSelectedPhoto(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.95)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div style={{ position: "absolute", top: "16px", right: "16px", color: "white", fontSize: "28px", cursor: "pointer" }}>✕</div>
+          <img src={selectedPhoto} alt="Full size" style={{ maxWidth: "100%", maxHeight: "90vh", borderRadius: "12px", objectFit: "contain" }} onClick={e => e.stopPropagation()} />
+        </div>
+      )}
 
       <div style={{ background: "#534AB7", padding: "1rem 1.25rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
@@ -106,59 +130,49 @@ export default function Home() {
         </div>
       </div>
 
-      {specials.length > 0 && (
-        <div style={{ padding: "1.25rem 1.25rem 0" }}>
-          <div style={{ fontSize: "11px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>✦ Specials near you</div>
-          {specials.map((biz: any) => (
-            <Link key={biz.id} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "block", marginBottom: "10px" }}>
-              <div style={{ background: "white", borderRadius: "16px", overflow: "hidden", border: "1px solid #eee", padding: "14px 16px", display: "flex", gap: "12px", alignItems: "center" }}>
-                <div style={{ width: "48px", height: "48px", borderRadius: "12px", overflow: "hidden", flexShrink: 0 }}>
-                  <img src={biz.cover_url || categoryPhotos[biz.category] || categoryPhotos.default} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
-                    <span style={{ fontSize: "10px", fontWeight: "700", color: "#534AB7", background: "#EEEDFE", padding: "2px 8px", borderRadius: "10px" }}>SPECIAL</span>
-                    <span style={{ fontSize: "12px", fontWeight: "600", color: "#111" }}>{biz.name}</span>
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#555", lineHeight: "1.4" }}>{biz.special_today}</div>
-                </div>
-                <span style={{ color: "#ddd", fontSize: "18px" }}>›</span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {reviewsWithPhotos.length > 0 && (
-        <div style={{ padding: "1.25rem 1.25rem 0" }}>
-          <div style={{ fontSize: "11px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>📸 Just posted near you</div>
-          <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px", scrollbarWidth: "none" } as any}>
-            {reviewsWithPhotos.slice(0, 10).map((review: any) => (
-              <Link key={review.id} href={`/business/${review.business_id}`} style={{ textDecoration: "none", flexShrink: 0, width: "130px" }}>
-                <div style={{ borderRadius: "14px", overflow: "hidden", height: "130px", background: "#ddd", marginBottom: "6px", position: "relative" }}>
-                  <img src={review.media_urls[0]} alt="Review photo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,0.6) 100%)" }} />
-                  <div style={{ position: "absolute", bottom: "6px", left: "6px", right: "6px" }}>
-                    <div style={{ fontSize: "10px", fontWeight: "600", color: "white", lineHeight: "1.3" }}>{review.businesses?.name}</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: "11px", color: "#888" }}>{review.reviewer_name}</div>
-              </Link>
-            ))}
+      <div>
+        {feedItems.length === 0 && (
+          <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
+            <div style={{ fontSize: "32px", marginBottom: "8px" }}>📍</div>
+            <div style={{ fontSize: "14px", color: "#888", marginBottom: "12px" }}>Nothing within {radius} miles yet</div>
+            <div onClick={() => setRadius(r => r === 3 ? 5 : 10)} style={{ fontSize: "13px", color: "#534AB7", fontWeight: "600", cursor: "pointer" }}>
+              {radius < 10 ? `Expand to ${radius === 3 ? 5 : 10} miles →` : "More coming soon"}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {nearbyReviews.length > 0 && (
-        <div style={{ padding: "1.25rem 1.25rem 0" }}>
-          <div style={{ fontSize: "11px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>💬 Recent reviews near you</div>
-          {nearbyReviews.slice(0, 5).map((review: any) => (
-            <Link key={review.id} href={`/business/${review.business_id}`} style={{ textDecoration: "none", display: "block", marginBottom: "10px" }}>
-              <div style={{ background: "white", borderRadius: "16px", padding: "14px 16px", border: "1px solid #eee" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                  <div>
-                    <div style={{ fontSize: "13px", fontWeight: "600", color: "#111", marginBottom: "2px" }}>{review.businesses?.name}</div>
-                    <div style={{ fontSize: "11px", color: "#888" }}>{review.reviewer_name} · {new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
+        {feedItems.map((item) => {
+          if (item.type === "special") {
+            const biz = item.biz
+            return (
+              <Link key={`special-${biz.id}`} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "block" }}>
+                <div style={{ position: "relative", height: "280px" }}>
+                  <img src={biz.special_media_url || biz.cover_url || categoryPhotos[biz.category] || categoryPhotos.default} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.7) 100%)" }} />
+                  <div style={{ position: "absolute", top: "14px", left: "14px", background: "#534AB7", color: "white", fontSize: "10px", fontWeight: "700", padding: "4px 12px", borderRadius: "20px" }}>✦ SPECIAL TODAY</div>
+                  <div style={{ position: "absolute", bottom: "16px", left: "16px", right: "16px" }}>
+                    <div style={{ fontSize: "18px", fontWeight: "700", color: "white", marginBottom: "4px" }}>{biz.name}</div>
+                    <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.9)" }}>{biz.special_today}</div>
+                  </div>
+                </div>
+                <div style={{ height: "1px", background: "#eee" }} />
+              </Link>
+            )
+          }
+
+          if (item.type === "review") {
+            const review = item.review
+            return (
+              <div key={`review-${review.id}`} style={{ padding: "16px 1.25rem", borderBottom: "1px solid #eee" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: "#534AB7", flexShrink: 0 }}>
+                    {review.reviewer_initials || "R"}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "13px", fontWeight: "600", color: "#111" }}>{review.reviewer_name}</div>
+                    <div style={{ fontSize: "11px", color: "#888" }}>
+                      reviewed <Link href={`/business/${review.business_id}`} style={{ color: "#534AB7", textDecoration: "none", fontWeight: "600" }}>{review.businesses?.name}</Link> · {new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </div>
                   </div>
                   <div style={{ display: "flex", gap: "1px" }}>
                     {[1,2,3,4,5].map(s => (
@@ -166,68 +180,51 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-                <div style={{ fontSize: "13px", color: "#555", lineHeight: "1.5", marginBottom: review.media_urls?.length > 0 ? "10px" : "0" }}>
-                  {review.text?.slice(0, 120)}{review.text?.length > 120 ? "..." : ""}
+                <div style={{ fontSize: "14px", color: "#333", lineHeight: "1.6", marginBottom: review.media_urls?.length > 0 ? "12px" : "0" }}>
+                  {review.text?.slice(0, 200)}{review.text?.length > 200 ? "..." : ""}
                 </div>
                 {review.media_urls?.length > 0 && (
-                  <div style={{ display: "flex", gap: "6px", overflowX: "auto" }}>
-                    {review.media_urls.slice(0, 3).map((url: string, i: number) => (
-                      <img key={i} src={url} alt="Review photo" style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
+                  <div style={{ display: "flex", gap: "6px", overflowX: "auto", marginLeft: "-1.25rem", paddingLeft: "1.25rem", paddingRight: "1.25rem", paddingBottom: "4px" }}>
+                    {review.media_urls.map((url: string, i: number) => (
+                      <img key={i} src={url} alt="Review photo" onClick={() => setSelectedPhoto(url)} style={{ width: "120px", height: "120px", objectFit: "cover", borderRadius: "12px", flexShrink: 0, cursor: "pointer" }} />
                     ))}
                   </div>
                 )}
               </div>
-            </Link>
-          ))}
-        </div>
-      )}
+            )
+          }
 
-      <div style={{ padding: "1.25rem 1.25rem 0" }}>
-        <div style={{ fontSize: "11px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
-          📍 Near you — {nearbyBusinesses.length} spot{nearbyBusinesses.length !== 1 ? "s" : ""} within {radius} miles
-        </div>
-
-        {nearbyBusinesses.length === 0 && (
-          <div style={{ textAlign: "center", padding: "2rem", background: "white", borderRadius: "16px", marginBottom: "12px" }}>
-            <div style={{ fontSize: "32px", marginBottom: "8px" }}>📍</div>
-            <div style={{ fontSize: "14px", color: "#888", marginBottom: "12px" }}>No businesses within {radius} miles yet</div>
-            <div onClick={() => setRadius(r => r === 3 ? 5 : r === 5 ? 10 : 10)} style={{ fontSize: "13px", color: "#534AB7", fontWeight: "600", cursor: "pointer" }}>
-              {radius < 10 ? `Expand to ${radius === 3 ? 5 : 10} miles →` : "More businesses coming soon"}
-            </div>
-          </div>
-        )}
-
-        {nearbyBusinesses.map((biz: any) => (
-          <Link key={biz.id} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "block", marginBottom: "10px" }}>
-            <div style={{ background: "white", borderRadius: "16px", overflow: "hidden", border: "1px solid #eee", display: "flex", height: "88px" }}>
-              <div style={{ width: "88px", flexShrink: 0, background: "#ddd" }}>
-                <img src={biz.cover_url || categoryPhotos[biz.category] || categoryPhotos.default} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              </div>
-              <div style={{ padding: "12px 14px", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px" }}>{biz.name}</div>
-                <div style={{ fontSize: "12px", color: "#888", marginBottom: "6px" }}>{biz.category} · {biz.city}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ fontSize: "12px", color: "#534AB7" }}>{"✦".repeat(Math.round(biz.google_rating || 0))}</span>
-                  <span style={{ fontSize: "11px", color: "#888" }}>{biz.google_rating}</span>
-                  {biz.special_today && <span style={{ fontSize: "10px", color: "#534AB7", background: "#EEEDFE", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Special today</span>}
-                  {!biz.claimed && !biz.special_today && <span style={{ fontSize: "10px", color: "#854F0B", background: "#FAEEDA", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Unclaimed</span>}
+          if (item.type === "business") {
+            const biz = item.biz
+            return (
+              <Link key={`biz-${biz.id}`} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee" }}>
+                <div style={{ width: "60px", height: "60px", borderRadius: "14px", overflow: "hidden", flexShrink: 0 }}>
+                  <img src={biz.cover_url || categoryPhotos[biz.category] || categoryPhotos.default} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", padding: "0 12px" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px" }}>{biz.name}</div>
+                  <div style={{ fontSize: "12px", color: "#888", marginBottom: "5px" }}>{biz.category} · {biz.city}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ fontSize: "11px", color: "#534AB7" }}>{"✦".repeat(Math.round(biz.google_rating || 0))}</span>
+                    <span style={{ fontSize: "11px", color: "#888" }}>{biz.google_rating}</span>
+                    {biz.special_today && <span style={{ fontSize: "10px", color: "#534AB7", background: "#EEEDFE", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Special today</span>}
+                    {!biz.claimed && !biz.special_today && <span style={{ fontSize: "10px", color: "#854F0B", background: "#FAEEDA", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Unclaimed</span>}
+                  </div>
+                </div>
                 <span style={{ color: "#ddd", fontSize: "18px" }}>›</span>
-              </div>
-            </div>
-          </Link>
-        ))}
+              </Link>
+            )
+          }
 
-        {nearbyBusinesses.length > 0 && radius < 10 && (
-          <div onClick={() => setRadius(r => r === 3 ? 5 : 10)} style={{ textAlign: "center", padding: "14px", background: "white", borderRadius: "16px", border: "1px solid #eee", fontSize: "13px", color: "#534AB7", fontWeight: "600", cursor: "pointer", marginTop: "4px" }}>
+          return null
+        })}
+
+        {feedItems.length > 0 && radius < 10 && (
+          <div onClick={() => setRadius(r => r === 3 ? 5 : 10)} style={{ textAlign: "center", padding: "20px", fontSize: "13px", color: "#534AB7", fontWeight: "600", cursor: "pointer" }}>
             Show more within {radius === 3 ? 5 : 10} miles →
           </div>
         )}
       </div>
-
-      <ReviButton />
 
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
         <div onClick={() => window.scrollTo(0, 0)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", cursor: "pointer" }}>
@@ -238,9 +235,13 @@ export default function Home() {
           <span style={{ fontSize: "20px" }}>⊕</span>
           <span style={{ fontSize: "11px", color: "#888" }}>Review</span>
         </Link>
-        <Link href="/influencers" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
+        <Link href="/revi" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
           <span style={{ fontSize: "20px" }}>✦</span>
-          <span style={{ fontSize: "11px", color: "#888" }}>Influencers</span>
+          <span style={{ fontSize: "11px", color: "#888" }}>Revi</span>
+        </Link>
+        <Link href="/influencers" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
+          <span style={{ fontSize: "20px" }}>⊕</span>
+          <span style={{ fontSize: "11px", color: "#888" }}>Creators</span>
         </Link>
         <Link href="/profile" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
           <span style={{ fontSize: "20px" }}>◯</span>
