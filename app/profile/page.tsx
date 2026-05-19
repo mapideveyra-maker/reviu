@@ -11,10 +11,19 @@ export default function Profile() {
   const [reviews, setReviews] = useState<any[]>([])
   const [reviuScore, setReviuScore] = useState<number | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [editingReview, setEditingReview] = useState<any | null>(null)
+  const [editText, setEditText] = useState("")
+  const [editStars, setEditStars] = useState(0)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   useEffect(() => {
+    loadData()
+  }, [])
+
+  async function loadData() {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -37,7 +46,7 @@ export default function Profile() {
       }
       setLoading(false)
     })
-  }, [])
+  }
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -53,6 +62,39 @@ export default function Profile() {
       setUser((prev: any) => ({ ...prev, user_metadata: { ...prev.user_metadata, profile_photo_url: urlData.publicUrl } }))
     }
     setUploadingPhoto(false)
+  }
+
+  function canEditOrDelete(review: any) {
+    if (review.stars >= 4) return true
+    if (review.resolution_status === "resolved") return true
+    return false
+  }
+
+  function openEdit(review: any) {
+    setEditingReview(review)
+    setEditText(review.text)
+    setEditStars(review.stars)
+  }
+
+  async function saveEdit() {
+    if (!editingReview) return
+    setSavingEdit(true)
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    await supabase.from("reviews").update({
+      text: editText,
+      stars: editStars,
+    }).eq("id", editingReview.id)
+    setReviews(prev => prev.map(r => r.id === editingReview.id ? { ...r, text: editText, stars: editStars } : r))
+    setEditingReview(null)
+    setSavingEdit(false)
+  }
+
+  async function deleteReview(reviewId: string) {
+    setDeletingId(reviewId)
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    await supabase.from("reviews").delete().eq("id", reviewId)
+    setReviews(prev => prev.filter(r => r.id !== reviewId))
+    setDeletingId(null)
   }
 
   async function handleSignOut() {
@@ -82,6 +124,39 @@ export default function Profile() {
 
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
+
+      {editingReview && (
+        <>
+          <div onClick={() => setEditingReview(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200 }} />
+          <div style={{ position: "fixed", bottom: "64px", left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderRadius: "20px 20px 0 0", zIndex: 201, padding: "1.25rem" }}>
+            <div style={{ width: "36px", height: "4px", background: "#ddd", borderRadius: "2px", margin: "0 auto 16px" }} />
+            <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Edit review</div>
+            <div style={{ fontSize: "12px", color: "#888", marginBottom: "16px" }}>{editingReview.businesses?.name}</div>
+
+            <div style={{ display: "flex", gap: "8px", justifyContent: "center", marginBottom: "16px" }}>
+              {[1,2,3,4,5].map(star => (
+                <span key={star} onClick={() => editStars >= 4 ? setEditStars(star) : null} style={{ fontSize: "32px", color: star <= editStars ? "#534AB7" : "#ddd", cursor: editStars >= 4 ? "pointer" : "default" }}>✦</span>
+              ))}
+            </div>
+
+            <textarea
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", minHeight: "120px", resize: "none", boxSizing: "border-box", fontFamily: "sans-serif", lineHeight: "1.6", marginBottom: "12px" }}
+            />
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              <div onClick={() => setEditingReview(null)} style={{ flex: 1, padding: "12px", borderRadius: "12px", border: "1px solid #eee", background: "white", color: "#888", fontSize: "14px", fontWeight: "600", textAlign: "center", cursor: "pointer" }}>
+                Cancel
+              </div>
+              <div onClick={saveEdit} style={{ flex: 2, padding: "12px", borderRadius: "12px", background: savingEdit ? "#9990D9" : "#534AB7", color: "white", fontSize: "14px", fontWeight: "600", textAlign: "center", cursor: "pointer" }}>
+                {savingEdit ? "Saving..." : "Save changes"}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       <div style={{ background: "#534AB7", padding: "1rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ fontSize: "18px", fontWeight: "700", color: "white" }}>My Profile</span>
         <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.8)", cursor: "pointer" }}>Settings</span>
@@ -97,7 +172,7 @@ export default function Profile() {
                 user?.email?.slice(0, 2).toUpperCase()
               )}
             </div>
-            <div onClick={() => fileInputRef.current?.click()} style={{ position: "absolute", bottom: 0, right: 0, width: "24px", height: "24px", borderRadius: "50%", background: "#534AB7", border: "2px solid white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "12px" }}>
+            <div onClick={() => fileInputRef.current?.click()} style={{ position: "absolute", bottom: 0, right: 0, width: "24px", height: "24px", borderRadius: "50%", background: "#534AB7", border: "2px solid white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "12px", color: "white" }}>
               {uploadingPhoto ? "..." : "+"}
             </div>
             <input ref={fileInputRef} type="file" accept="image/*" capture="user" onChange={handlePhotoChange} style={{ display: "none" }} />
@@ -174,10 +249,20 @@ export default function Profile() {
                 {new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                 {review.resolution_status === "resolved" && <span style={{ color: "#3B6D11", fontWeight: "600" }}> · ✓ Resolved</span>}
               </div>
-              <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.5" }}>{review.text}</div>
+              <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.5", marginBottom: "8px" }}>{review.text}</div>
               {review.legitimacy_score && (
-                <div style={{ marginTop: "6px", fontSize: "11px", color: getScoreColor(review.legitimacy_score).color, fontWeight: "600" }}>
+                <div style={{ marginBottom: "8px", fontSize: "11px", color: getScoreColor(review.legitimacy_score).color, fontWeight: "600" }}>
                   ✦ Reviu Score: {review.legitimacy_score}
+                </div>
+              )}
+              {canEditOrDelete(review) && (
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <div onClick={() => openEdit(review)} style={{ padding: "6px 14px", borderRadius: "20px", border: "1px solid #534AB7", background: "white", color: "#534AB7", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}>
+                    Edit
+                  </div>
+                  <div onClick={() => deleteReview(review.id)} style={{ padding: "6px 14px", borderRadius: "20px", border: "1px solid #F09595", background: "white", color: "#A32D2D", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}>
+                    {deletingId === review.id ? "Deleting..." : "Delete"}
+                  </div>
                 </div>
               )}
             </div>

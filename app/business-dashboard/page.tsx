@@ -21,6 +21,8 @@ export default function BusinessDashboard() {
   const [messages, setMessages] = useState<Record<string, any[]>>({})
   const [messageText, setMessageText] = useState<Record<string, string>>({})
   const [sendingMessage, setSendingMessage] = useState<string | null>(null)
+  const [perspectiveText, setPerspectiveText] = useState<Record<string, string>>({})
+  const [savingPerspective, setSavingPerspective] = useState<string | null>(null)
   const [reelTitle, setReelTitle] = useState("")
   const [reelDesc, setReelDesc] = useState("")
   const [reelUrl, setReelUrl] = useState("")
@@ -106,23 +108,46 @@ export default function BusinessDashboard() {
     if (data) {
       setMessages(prev => ({ ...prev, [reviewId]: [...(prev[reviewId] || []), data] }))
       setMessageText(prev => ({ ...prev, [reviewId]: "" }))
+      const reviewMessages = messages[reviewId] || []
+      const isFirstBusinessMessage = !reviewMessages.some((m: any) => m.sender_type === "business")
+      if (isFirstBusinessMessage) {
+        const review = reviews.find(r => r.id === reviewId)
+        if (review) {
+          const oneWeekFromCreation = new Date(new Date(review.created_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+          await supabase.from("reviews").update({
+            pending_expires_at: oneWeekFromCreation,
+            business_voted: true,
+          }).eq("id", reviewId)
+          setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, pending_expires_at: oneWeekFromCreation, business_voted: true } : r))
+        }
+      }
     }
     setSendingMessage(null)
   }
 
   async function markResolved(reviewId: string) {
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-    await supabase.from("reviews").update({
-      business_voted: true,
-    }).eq("id", reviewId)
+    await supabase.from("reviews").update({ business_voted: true }).eq("id", reviewId)
     setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, business_voted: true } : r))
+  }
+
+  async function savePerspective(reviewId: string) {
+    if (!perspectiveText[reviewId]?.trim()) return
+    setSavingPerspective(reviewId)
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    await supabase.from("reviews").update({
+      business_perspective: perspectiveText[reviewId].trim(),
+      business_perspective_at: new Date().toISOString(),
+    }).eq("id", reviewId)
+    setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, business_perspective: perspectiveText[reviewId].trim() } : r))
+    setSavingPerspective(null)
   }
 
   async function uploadFile(file: File, folder: string) {
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
     const ext = file.name.split(".").pop()
     const fileName = `${folder}/${business.id}-${Date.now()}.${ext}`
-    const { data, error } = await supabase.storage.from("reviu-media").upload(fileName, file, { upsert: true })
+    const { error } = await supabase.storage.from("reviu-media").upload(fileName, file, { upsert: true })
     if (error) return null
     const { data: urlData } = supabase.storage.from("reviu-media").getPublicUrl(fileName)
     return urlData.publicUrl
@@ -247,7 +272,7 @@ export default function BusinessDashboard() {
   if (!business) return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
       <div style={{ background: "#534AB7", padding: "1rem 1.25rem", display: "flex", alignItems: "center", gap: "12px" }}>
-        <Link href="/" style={{ color: "white", fontSize: "20px", textDecoration: "none" }}>←</Link>
+        <div onClick={() => window.history.back()} style={{ color: "white", fontSize: "20px", cursor: "pointer" }}>←</div>
         <span style={{ fontSize: "16px", fontWeight: "600", color: "white" }}>Business Dashboard</span>
       </div>
       <div style={{ padding: "3rem 1.25rem", textAlign: "center" }}>
@@ -268,7 +293,7 @@ export default function BusinessDashboard() {
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
       <div style={{ background: accentColor, padding: "1rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <Link href="/" style={{ color: "white", fontSize: "20px", textDecoration: "none" }}>←</Link>
+          <div onClick={() => window.history.back()} style={{ color: "white", fontSize: "20px", cursor: "pointer" }}>←</div>
           <div>
             <div style={{ fontSize: "15px", fontWeight: "600", color: "white" }}>{business.name}</div>
             <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.7)" }}>Business Dashboard</div>
@@ -315,7 +340,7 @@ export default function BusinessDashboard() {
 
             {pendingReviews.length > 0 && (
               <div style={{ background: "#FAEEDA", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px" }}>
-                <div style={{ fontSize: "13px", fontWeight: "600", color: "#854F0B", marginBottom: "4px" }}>⏱ {pendingReviews.length} review{pendingReviews.length > 1 ? "s" : ""} in 72hr resolution window</div>
+                <div style={{ fontSize: "13px", fontWeight: "600", color: "#854F0B", marginBottom: "4px" }}>⏱ {pendingReviews.length} review{pendingReviews.length > 1 ? "s" : ""} in resolution window</div>
                 <div style={{ fontSize: "12px", color: "#854F0B", lineHeight: "1.5" }}>Reach out privately before they go public.</div>
                 <div onClick={() => setActiveTab("reviews")} style={{ fontSize: "12px", color: accentColor, fontWeight: "600", marginTop: "8px", cursor: "pointer" }}>View and respond →</div>
               </div>
@@ -328,7 +353,7 @@ export default function BusinessDashboard() {
                 { label: "Post today's special", sub: "Notify your followers instantly", tab: "special", icon: "✨" },
                 { label: "Post a reel", sub: "Share a video to attract customers", tab: "reels", icon: "🎬" },
                 { label: "Reviu Rewards", sub: `${followers} followers on your list`, tab: "rewards", icon: "♟" },
-                { label: "Resolve reviews", sub: `${pendingReviews.length} pending in 72hr window`, tab: "reviews", icon: "💬" },
+                { label: "Resolve reviews", sub: `${pendingReviews.length} pending in resolution window`, tab: "reviews", icon: "💬" },
               ].map(action => (
                 <div key={action.label} onClick={() => setActiveTab(action.tab)} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 0", borderBottom: "1px solid #f5f5f5", cursor: "pointer" }}>
                   <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", flexShrink: 0 }}>{action.icon}</div>
@@ -350,12 +375,17 @@ export default function BusinessDashboard() {
                 <div style={{ fontSize: "13px", fontWeight: "600", color: "#854F0B", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>⏱ In resolution window</div>
                 {pendingReviews.map(review => {
                   const reviewMessages = messages[review.id] || []
-                  const hoursLeft = Math.max(0, Math.round((new Date(review.pending_expires_at).getTime() - Date.now()) / 3600000))
+                  const expiresAt = review.pending_expires_at ? new Date(review.pending_expires_at) : null
+                  const hoursLeft = expiresAt ? Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / 3600000)) : 72
+                  const daysLeft = Math.ceil(hoursLeft / 24)
+                  const businessResponded = reviewMessages.some((m: any) => m.sender_type === "business")
+                  const withinWeek = review.business_voted === true
+
                   return (
                     <div key={review.id} style={{ background: "white", borderRadius: "16px", padding: "1.25rem", marginBottom: "12px", border: "1px solid #EF9F27" }}>
                       <div style={{ background: "#FAEEDA", borderRadius: "8px", padding: "8px 12px", marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div style={{ fontSize: "12px", color: "#854F0B", fontWeight: "500" }}>
-                          ⏱ {hoursLeft}hrs left to resolve
+                          ⏱ {hoursLeft < 24 ? `${hoursLeft}hrs` : `${daysLeft} day${daysLeft !== 1 ? "s" : ""}`} left
                         </div>
                         <div style={{ fontSize: "11px", color: "#854F0B" }}>Private</div>
                       </div>
@@ -397,7 +427,7 @@ export default function BusinessDashboard() {
                         style={{ width: "100%", padding: "10px 12px", borderRadius: "10px", border: "1px solid #e5e5e5", fontSize: "13px", background: "#f7f7f5", minHeight: "80px", resize: "none", boxSizing: "border-box", fontFamily: "sans-serif", lineHeight: "1.5", marginBottom: "8px" }}
                       />
 
-                      <div style={{ display: "flex", gap: "8px" }}>
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
                         <div onClick={() => sendMessage(review.id)} style={{ flex: 1, background: sendingMessage === review.id ? "#9990D9" : accentColor, color: "white", padding: "10px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", cursor: "pointer" }}>
                           {sendingMessage === review.id ? "Sending..." : "Send message"}
                         </div>
@@ -412,6 +442,31 @@ export default function BusinessDashboard() {
                           </div>
                         )}
                       </div>
+
+                      {withinWeek && !review.business_perspective && (
+                        <div style={{ borderTop: "1px solid #eee", paddingTop: "12px" }}>
+                          <div style={{ fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>Our perspective</div>
+                          <div style={{ fontSize: "12px", color: "#888", marginBottom: "8px" }}>Share your side of the story. This will show publicly alongside the review if unresolved.</div>
+                          <textarea
+                            value={perspectiveText[review.id] || ""}
+                            onChange={e => setPerspectiveText(prev => ({ ...prev, [review.id]: e.target.value }))}
+                            placeholder="Explain your side honestly and professionally..."
+                            style={{ width: "100%", padding: "10px 12px", borderRadius: "10px", border: "1px solid #e5e5e5", fontSize: "13px", background: "#f7f7f5", minHeight: "80px", resize: "none", boxSizing: "border-box", fontFamily: "sans-serif", lineHeight: "1.5", marginBottom: "8px" }}
+                          />
+                          <div onClick={() => savePerspective(review.id)} style={{ background: savingPerspective === review.id ? "#9990D9" : "#534AB7", color: "white", padding: "10px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", cursor: "pointer" }}>
+                            {savingPerspective === review.id ? "Saving..." : "Save perspective"}
+                          </div>
+                        </div>
+                      )}
+
+                      {review.business_perspective && (
+                        <div style={{ borderTop: "1px solid #eee", paddingTop: "12px" }}>
+                          <div style={{ background: "#EEEDFE", borderRadius: "10px", padding: "10px 12px" }}>
+                            <div style={{ fontSize: "11px", fontWeight: "600", color: "#534AB7", marginBottom: "4px" }}>✦ Our perspective saved</div>
+                            <div style={{ fontSize: "13px", color: "#3C3489" }}>{review.business_perspective}</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -428,6 +483,9 @@ export default function BusinessDashboard() {
                     )}
                     {review.resolution_status === "unresolved" && (
                       <div style={{ background: "#FAEEDA", borderRadius: "8px", padding: "6px 12px", marginBottom: "10px", fontSize: "12px", color: "#854F0B", fontWeight: "500" }}>⚠ Unresolved</div>
+                    )}
+                    {review.resolution_status === "no_response" && (
+                      <div style={{ background: "#FCEBEB", borderRadius: "8px", padding: "6px 12px", marginBottom: "10px", fontSize: "12px", color: "#A32D2D", fontWeight: "500" }}>✕ No response</div>
                     )}
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -446,6 +504,12 @@ export default function BusinessDashboard() {
                       </div>
                     </div>
                     <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.6" }}>{review.text}</div>
+                    {review.business_perspective && (
+                      <div style={{ marginTop: "10px", background: "#EEEDFE", borderRadius: "10px", padding: "10px 12px" }}>
+                        <div style={{ fontSize: "11px", fontWeight: "600", color: "#534AB7", marginBottom: "4px" }}>✦ Our perspective</div>
+                        <div style={{ fontSize: "13px", color: "#3C3489" }}>{review.business_perspective}</div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -526,7 +590,6 @@ export default function BusinessDashboard() {
               <div style={{ marginBottom: "16px" }}>
                 <label style={{ fontSize: "12px", fontWeight: "600", color: "#888", display: "block", marginBottom: "6px" }}>Video URL</label>
                 <input type="text" value={reelUrl} onChange={e => setReelUrl(e.target.value)} placeholder="https://... (YouTube, Vimeo, TikTok link)" style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", boxSizing: "border-box" }} />
-                <div style={{ fontSize: "11px", color: "#aaa", marginTop: "4px" }}>Direct video upload coming soon.</div>
               </div>
               {reelSaved && <div style={{ background: "#EAF3DE", color: "#3B6D11", padding: "10px 14px", borderRadius: "10px", fontSize: "13px", fontWeight: "500", marginBottom: "12px" }}>✓ Reel posted successfully</div>}
               <div onClick={postReel} style={{ background: !reelTitle || !reelUrl || savingReel ? "#9990D9" : accentColor, color: "white", padding: "14px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textAlign: "center", cursor: !reelTitle || !reelUrl ? "not-allowed" : "pointer" }}>
@@ -560,7 +623,6 @@ export default function BusinessDashboard() {
           <>
             <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
               <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Logo</div>
-              <div style={{ fontSize: "13px", color: "#888", marginBottom: "16px", lineHeight: "1.5" }}>Upload your logo. It replaces the initials on your profile.</div>
               <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "12px" }}>
                 <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: accentColor, border: "4px solid #eee", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
                   {business.logo_url ? <img src={business.logo_url} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: "22px", fontWeight: "700", color: "white" }}>{business.name.slice(0, 2).toUpperCase()}</span>}
@@ -571,7 +633,7 @@ export default function BusinessDashboard() {
                   </div>
                   {business.logo_url && (
                     <div onClick={removeLogo} style={{ padding: "8px 12px", borderRadius: "10px", border: "1px solid #F09595", textAlign: "center", cursor: "pointer", background: "white" }}>
-                      <div style={{ fontSize: "12px", fontWeight: "600", color: "#A32D2D" }}>Remove — use initials</div>
+                      <div style={{ fontSize: "12px", fontWeight: "600", color: "#A32D2D" }}>Remove</div>
                     </div>
                   )}
                 </div>
@@ -579,8 +641,7 @@ export default function BusinessDashboard() {
               </div>
             </div>
             <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
-              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Brand color</div>
-              <div style={{ fontSize: "13px", color: "#888", marginBottom: "16px", lineHeight: "1.5" }}>Pick your exact brand color.</div>
+              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "12px" }}>Brand color</div>
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <input type="color" value={brandColor} onChange={e => setBrandColor(e.target.value)} style={{ width: "56px", height: "56px", borderRadius: "12px", border: "none", cursor: "pointer", padding: "4px", background: "none" }} />
                 <div style={{ flex: 1 }}>
@@ -593,13 +654,11 @@ export default function BusinessDashboard() {
               </div>
             </div>
             <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
-              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Tagline</div>
-              <div style={{ fontSize: "13px", color: "#888", marginBottom: "12px" }}>A short line that appears under your name.</div>
+              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "8px" }}>Tagline</div>
               <input type="text" value={tagline} onChange={e => setTagline(e.target.value)} placeholder="e.g. Cincinnati's best kept secret since 2019" maxLength={80} style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", boxSizing: "border-box" }} />
             </div>
             <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
-              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Photo gallery</div>
-              <div style={{ fontSize: "13px", color: "#888", marginBottom: "12px", lineHeight: "1.5" }}>Up to 8 photos shown on your profile.</div>
+              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "8px" }}>Photo gallery</div>
               {(business.gallery_urls || []).length > 0 && (
                 <div style={{ display: "flex", gap: "8px", overflowX: "auto", marginBottom: "12px", paddingBottom: "4px" }}>
                   {(business.gallery_urls || []).map((url: string, i: number) => (
@@ -613,15 +672,14 @@ export default function BusinessDashboard() {
               {(business.gallery_urls || []).length < 8 && (
                 <div onClick={() => galleryInputRef.current?.click()} style={{ border: "2px dashed #e5e5e5", borderRadius: "12px", padding: "1.5rem", textAlign: "center", cursor: "pointer", background: "#f7f7f5" }}>
                   {uploadingGallery ? <div style={{ color: "#888" }}>Uploading...</div> : (
-                    <><div style={{ fontSize: "24px", marginBottom: "6px" }}>📷</div><div style={{ fontSize: "13px", fontWeight: "600", color: accentColor }}>Add photos</div><div style={{ fontSize: "11px", color: "#aaa", marginTop: "2px" }}>{8 - (business.gallery_urls || []).length} spots remaining</div></>
+                    <><div style={{ fontSize: "24px", marginBottom: "6px" }}>📷</div><div style={{ fontSize: "13px", fontWeight: "600", color: accentColor }}>Add photos</div></>
                   )}
                 </div>
               )}
               <input ref={galleryInputRef} type="file" accept="image/*" multiple onChange={handleGalleryUpload} style={{ display: "none" }} />
             </div>
             <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
-              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Profile music</div>
-              <div style={{ fontSize: "13px", color: "#888", marginBottom: "12px", lineHeight: "1.5" }}>A song that plays softly when someone opens your profile.</div>
+              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "8px" }}>Profile music</div>
               <div style={{ marginBottom: "10px" }}>
                 <label style={{ fontSize: "12px", fontWeight: "600", color: "#888", display: "block", marginBottom: "6px" }}>Song title</label>
                 <input type="text" value={musicTitle} onChange={e => setMusicTitle(e.target.value)} placeholder="e.g. Kind of Blue - Miles Davis" style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "14px", background: "#f7f7f5", boxSizing: "border-box" }} />
@@ -639,40 +697,31 @@ export default function BusinessDashboard() {
         )}
 
         {activeTab === "rewards" && (
-          <>
-            <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee", marginBottom: "12px" }}>
-              <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Reviu Rewards</div>
-              <div style={{ fontSize: "13px", color: "#888", marginBottom: "16px", lineHeight: "1.5" }}>Customers who follow your business on Reviu get notified when you post specials or reels.</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "20px" }}>
-                <div style={{ background: "#f7f7f5", borderRadius: "12px", padding: "16px", textAlign: "center", border: `2px solid ${accentColor}` }}>
-                  <div style={{ fontSize: "32px", fontWeight: "700", color: accentColor }}>{followers}</div>
-                  <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>Total followers</div>
-                </div>
-                <div style={{ background: "#f7f7f5", borderRadius: "12px", padding: "16px", textAlign: "center" }}>
-                  <div style={{ fontSize: "32px", fontWeight: "700", color: "#3B6D11" }}>{publishedReviews.length}</div>
-                  <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>Verified reviewers</div>
-                </div>
+          <div style={{ background: "white", borderRadius: "16px", padding: "1.25rem", border: "1px solid #eee" }}>
+            <div style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>Reviu Rewards</div>
+            <div style={{ fontSize: "13px", color: "#888", marginBottom: "16px", lineHeight: "1.5" }}>Customers who follow your business on Reviu get notified when you post specials or reels.</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "20px" }}>
+              <div style={{ background: "#f7f7f5", borderRadius: "12px", padding: "16px", textAlign: "center", border: `2px solid ${accentColor}` }}>
+                <div style={{ fontSize: "32px", fontWeight: "700", color: accentColor }}>{followers}</div>
+                <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>Total followers</div>
               </div>
-              <div style={{ background: accentColor, borderRadius: "12px", padding: "1.25rem", textAlign: "center" }}>
-                <div style={{ fontSize: "14px", fontWeight: "700", color: "white", marginBottom: "8px" }}>Share your Reviu profile</div>
-                <div style={{ background: "rgba(255,255,255,0.15)", borderRadius: "10px", padding: "10px 14px", fontSize: "12px", color: "white", fontFamily: "monospace", marginBottom: "12px", wordBreak: "break-all" }}>
-                  reviu-swart.vercel.app/business/{business.id}
-                </div>
-                <div style={{ background: "white", color: accentColor, padding: "12px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", cursor: "pointer" }}
-                  onClick={() => navigator.clipboard?.writeText(`https://reviu-swart.vercel.app/business/${business.id}`)}>
-                  Copy profile link
-                </div>
+              <div style={{ background: "#f7f7f5", borderRadius: "12px", padding: "16px", textAlign: "center" }}>
+                <div style={{ fontSize: "32px", fontWeight: "700", color: "#3B6D11" }}>{publishedReviews.length}</div>
+                <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>Verified reviewers</div>
               </div>
             </div>
-          </>
+            <div style={{ background: accentColor, borderRadius: "12px", padding: "1.25rem", textAlign: "center" }}>
+              <div style={{ fontSize: "14px", fontWeight: "700", color: "white", marginBottom: "8px" }}>Share your Reviu profile</div>
+              <div style={{ background: "rgba(255,255,255,0.15)", borderRadius: "10px", padding: "10px 14px", fontSize: "12px", color: "white", fontFamily: "monospace", marginBottom: "12px", wordBreak: "break-all" }}>
+                reviu-swart.vercel.app/business/{business.id}
+              </div>
+              <div style={{ background: "white", color: accentColor, padding: "12px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", textAlign: "center", cursor: "pointer" }}
+                onClick={() => navigator.clipboard?.writeText(`https://reviu-swart.vercel.app/business/${business.id}`)}>
+                Copy profile link
+              </div>
+            </div>
+          </div>
         )}
-      </div>
-
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
-        <Link href="/" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊞</span><span style={{ fontSize: "11px", color: "#888" }}>Home</span></Link>
-        <Link href="/post-review" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊕</span><span style={{ fontSize: "11px", color: "#888" }}>Review</span></Link>
-        <Link href="/influencers" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>✦</span><span style={{ fontSize: "11px", color: "#888" }}>Influencers</span></Link>
-        <Link href="/profile" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>◯</span><span style={{ fontSize: "11px", color: "#888" }}>Profile</span></Link>
       </div>
     </div>
   )
