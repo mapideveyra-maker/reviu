@@ -3,20 +3,6 @@ import Link from "next/link"
 import { useState, useEffect } from "react"
 import { createClient } from "@supabase/supabase-js"
 
-const categoryPhotos: Record<string, string> = {
-  "Fine Dining": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80",
-  "Italian Restaurant": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&q=80",
-  "Mexican Restaurant": "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=800&q=80",
-  "Asian Restaurant": "https://images.unsplash.com/photo-1496116218417-1a781b1c416c?w=800&q=80",
-  "Experience": "https://images.unsplash.com/photo-1507048331197-7d4ac70811cf?w=800&q=80",
-  "Fitness": "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&q=80",
-  "Retail": "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&q=80",
-  "Grocery": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80",
-  "Services": "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?w=800&q=80",
-  "Health": "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800&q=80",
-  "default": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80",
-}
-
 function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 3958.8
   const dLat = (lat2 - lat1) * Math.PI / 180
@@ -25,6 +11,27 @@ function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
     Math.sin(dLng/2) * Math.sin(dLng/2)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+}
+
+function getPhotoUrl(photoName: string) {
+  return `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&key=${process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY}`
+}
+
+function getCategoryFromTypes(types: string[]) {
+  if (types.includes("fine_dining_restaurant")) return "Fine Dining"
+  if (types.includes("italian_restaurant")) return "Italian Restaurant"
+  if (types.includes("mexican_restaurant")) return "Mexican Restaurant"
+  if (types.includes("chinese_restaurant") || types.includes("japanese_restaurant") || types.includes("asian_restaurant")) return "Asian Restaurant"
+  if (types.includes("pizza_restaurant")) return "Pizza"
+  if (types.includes("burger_restaurant") || types.includes("hamburger_restaurant")) return "Burgers"
+  if (types.includes("brewery") || types.includes("brewpub")) return "Brewery"
+  if (types.includes("bar") || types.includes("cocktail_bar")) return "Bar"
+  if (types.includes("cafe") || types.includes("coffee_shop")) return "Cafe"
+  if (types.includes("breakfast_restaurant")) return "Breakfast"
+  if (types.includes("fast_food_restaurant")) return "Fast Food"
+  if (types.includes("steak_house")) return "Steakhouse"
+  if (types.includes("seafood_restaurant")) return "Seafood"
+  return "Restaurant"
 }
 
 export default function Home() {
@@ -47,52 +54,60 @@ export default function Home() {
 
   useEffect(() => {
     if (!location) return
+    loadFeed()
+  }, [location, radius])
+
+  async function loadFeed() {
+    setLoading(true)
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
-    Promise.all([
-      supabase.from("businesses").select("*"),
-      supabase.from("reviews").select("*, businesses(name, latitude, longitude, category, cover_url)").eq("status", "published").order("created_at", { ascending: false }).limit(50),
-    ]).then(([bizRes, reviewRes]) => {
-      const allBiz = bizRes.data || []
-      const allReviews = reviewRes.data || []
 
-      const nearbyBiz = allBiz.filter(b => {
-        if (!b.latitude || !b.longitude) return true
-        return getDistance(location.lat, location.lng, parseFloat(b.latitude), parseFloat(b.longitude)) <= radius
-      })
+    const radiusMeters = radius * 1609
 
-      const nearbyReviews = allReviews.filter(r => {
-        const biz = r.businesses
-        if (!biz?.latitude || !biz?.longitude) return true
-        return getDistance(location.lat, location.lng, parseFloat(biz.latitude), parseFloat(biz.longitude)) <= radius
-      })
+    const [placesRes, reviewRes, specialsRes] = await Promise.all([
+      fetch(`/api/places?lat=${location!.lat}&lng=${location!.lng}&radius=${radiusMeters}`),
+      supabase.from("reviews").select("*, businesses(name, category, cover_url, latitude, longitude)").eq("status", "published").order("created_at", { ascending: false }).limit(30),
+      supabase.from("businesses").select("*").not("special_today", "is", null),
+    ])
 
-      const items: any[] = []
+    const placesData = await placesRes.json()
+    const googlePlaces = placesData.places || []
+    const reviews = reviewRes.data || []
+    const specials = specialsRes.data || []
 
-      nearbyBiz.filter(b => b.special_today).forEach(biz => {
-        items.push({ type: "special", biz, createdAt: biz.updated_at || biz.created_at })
-      })
+    const items: any[] = []
 
-      nearbyReviews.forEach(review => {
-        items.push({ type: "review", review, createdAt: review.created_at })
-      })
-
-      nearbyBiz.forEach(biz => {
-        items.push({ type: "business", biz, createdAt: biz.created_at })
-      })
-
-      items.sort((a, b) => {
-        const typeOrder: Record<string, number> = { special: 0, review: 1, business: 2 }
-        if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type]
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      })
-
-      setFeedItems(items)
-      setLoading(false)
+    specials.forEach((biz: any) => {
+      items.push({ type: "special", biz, createdAt: biz.updated_at || biz.created_at })
     })
-  }, [location, radius])
+
+    reviews.forEach((review: any) => {
+      const biz = review.businesses
+      if (!biz?.latitude || !biz?.longitude) {
+        items.push({ type: "review", review, createdAt: review.created_at })
+        return
+      }
+      const dist = getDistance(location!.lat, location!.lng, parseFloat(biz.latitude), parseFloat(biz.longitude))
+      if (dist <= radius) {
+        items.push({ type: "review", review, createdAt: review.created_at })
+      }
+    })
+
+    googlePlaces.forEach((place: any) => {
+      items.push({ type: "google_place", place, createdAt: new Date().toISOString() })
+    })
+
+    items.sort((a, b) => {
+      const order: Record<string, number> = { special: 0, review: 1, google_place: 2 }
+      if (order[a.type] !== order[b.type]) return order[a.type] - order[b.type]
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    })
+
+    setFeedItems(items)
+    setLoading(false)
+  }
 
   if (loading) return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -141,13 +156,14 @@ export default function Home() {
           </div>
         )}
 
-        {feedItems.map((item) => {
+        {feedItems.map((item, index) => {
+
           if (item.type === "special") {
             const biz = item.biz
             return (
               <Link key={`special-${biz.id}`} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "block" }}>
                 <div style={{ position: "relative", height: "280px" }}>
-                  <img src={biz.special_media_url || biz.cover_url || categoryPhotos[biz.category] || categoryPhotos.default} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <img src={biz.special_media_url || biz.cover_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.7) 100%)" }} />
                   <div style={{ position: "absolute", top: "14px", left: "14px", background: "#534AB7", color: "white", fontSize: "10px", fontWeight: "700", padding: "4px 12px", borderRadius: "20px" }}>✦ SPECIAL TODAY</div>
                   <div style={{ position: "absolute", bottom: "16px", left: "16px", right: "16px" }}>
@@ -194,21 +210,28 @@ export default function Home() {
             )
           }
 
-          if (item.type === "business") {
-            const biz = item.biz
+          if (item.type === "google_place") {
+            const place = item.place
+            const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
+            const category = getCategoryFromTypes(place.types || [])
+            const isOpen = place.currentOpeningHours?.openNow
+
             return (
-              <Link key={`biz-${biz.id}`} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee" }}>
+              <Link key={`place-${place.id}`} href={`/search/${place.id}`} style={{ textDecoration: "none", display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee" }}>
                 <div style={{ width: "60px", height: "60px", borderRadius: "14px", overflow: "hidden", flexShrink: 0 }}>
-                  <img src={biz.cover_url || categoryPhotos[biz.category] || categoryPhotos.default} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <img src={photo} alt={place.displayName?.text} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px" }}>{biz.name}</div>
-                  <div style={{ fontSize: "12px", color: "#888", marginBottom: "5px" }}>{biz.category} · {biz.city}</div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px" }}>{place.displayName?.text}</div>
+                  <div style={{ fontSize: "12px", color: "#888", marginBottom: "5px" }}>{category}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <span style={{ fontSize: "11px", color: "#534AB7" }}>{"✦".repeat(Math.round(biz.google_rating || 0))}</span>
-                    <span style={{ fontSize: "11px", color: "#888" }}>{biz.google_rating}</span>
-                    {biz.special_today && <span style={{ fontSize: "10px", color: "#534AB7", background: "#EEEDFE", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Special today</span>}
-                    {!biz.claimed && !biz.special_today && <span style={{ fontSize: "10px", color: "#854F0B", background: "#FAEEDA", padding: "1px 6px", borderRadius: "6px", fontWeight: "600" }}>Unclaimed</span>}
+                    <span style={{ fontSize: "11px", color: "#534AB7" }}>{"✦".repeat(Math.round(place.rating || 0))}</span>
+                    <span style={{ fontSize: "11px", color: "#888" }}>{place.rating} ({place.userRatingCount?.toLocaleString()})</span>
+                    {isOpen !== undefined && (
+                      <span style={{ fontSize: "10px", color: isOpen ? "#3B6D11" : "#A32D2D", fontWeight: "600" }}>
+                        {isOpen ? "Open" : "Closed"}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <span style={{ color: "#ddd", fontSize: "18px" }}>›</span>
@@ -224,29 +247,6 @@ export default function Home() {
             Show more within {radius === 3 ? 5 : 10} miles →
           </div>
         )}
-      </div>
-
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
-        <div onClick={() => window.scrollTo(0, 0)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", cursor: "pointer" }}>
-          <span style={{ fontSize: "20px" }}>⊞</span>
-          <span style={{ fontSize: "11px", color: "#534AB7", fontWeight: "600" }}>Feed</span>
-        </div>
-        <Link href="/post-review" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
-          <span style={{ fontSize: "20px" }}>⊕</span>
-          <span style={{ fontSize: "11px", color: "#888" }}>Review</span>
-        </Link>
-        <Link href="/revi" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
-          <span style={{ fontSize: "20px" }}>✦</span>
-          <span style={{ fontSize: "11px", color: "#888" }}>Revi</span>
-        </Link>
-        <Link href="/influencers" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
-          <span style={{ fontSize: "20px" }}>⊕</span>
-          <span style={{ fontSize: "11px", color: "#888" }}>Creators</span>
-        </Link>
-        <Link href="/profile" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
-          <span style={{ fontSize: "20px" }}>◯</span>
-          <span style={{ fontSize: "11px", color: "#888" }}>Profile</span>
-        </Link>
       </div>
     </div>
   )
