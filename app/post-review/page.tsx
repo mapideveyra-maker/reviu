@@ -51,6 +51,8 @@ function ReviewForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const bizId = searchParams.get("business")
+  const googlePlaceId = searchParams.get("google_place_id")
+  const googlePlaceName = searchParams.get("name")
 
   useEffect(() => {
     const supabase = createClient(
@@ -59,7 +61,6 @@ function ReviewForm() {
     )
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user)
-      setLoading(false)
       if (!data.user) router.push("/signup")
     })
     supabase.from("businesses").select("id, name, category, city, state").then(({ data }) => {
@@ -69,8 +70,16 @@ function ReviewForm() {
         const found = bizList.find((b: any) => b.id === bizId)
         if (found) setSelectedBiz(found)
       }
+      setLoading(false)
     })
   }, [bizId])
+
+  useEffect(() => {
+    if (googlePlaceId && googlePlaceName) {
+      setSelectedBiz({ id: googlePlaceId, name: decodeURIComponent(googlePlaceName), isGoogle: true, category: "Restaurant" })
+      setLoading(false)
+    }
+  }, [googlePlaceId, googlePlaceName])
 
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
@@ -122,7 +131,6 @@ function ReviewForm() {
     const fullName = user.user_metadata?.full_name || "Reviu Member"
     const initials = fullName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
     const isPending = stars <= 3
-    const canUpgrade = stars === 4
 
     const { count } = await supabase
       .from("reviews")
@@ -151,8 +159,7 @@ function ReviewForm() {
       console.error("Scoring failed", e)
     }
 
-    const { error } = await supabase.from("reviews").insert({
-      business_id: selectedBiz.id,
+    const reviewData: any = {
       user_id: user.id,
       stars,
       text: text.trim(),
@@ -162,11 +169,18 @@ function ReviewForm() {
       reviewer_name: fullName,
       reviewer_initials: initials,
       status: isPending ? "pending" : "published",
-      can_upgrade: canUpgrade,
       pending_expires_at: isPending ? new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString() : null,
       legitimacy_score: reviuScore,
       media_urls: mediaUrls,
-    })
+    }
+
+    if (selectedBiz.isGoogle) {
+      reviewData.google_place_id = selectedBiz.id
+    } else {
+      reviewData.business_id = selectedBiz.id
+    }
+
+    const { error } = await supabase.from("reviews").insert(reviewData)
 
     if (error) {
       setError(error.message)
@@ -199,16 +213,13 @@ function ReviewForm() {
       <Link href="/" style={{ display: "block", background: "#534AB7", color: "white", padding: "14px 32px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textDecoration: "none", marginBottom: "12px", width: "100%", textAlign: "center" }}>
         Back to home
       </Link>
-      <Link href={`/business/${selectedBiz?.id}`} style={{ display: "block", background: "white", color: "#534AB7", padding: "14px 32px", borderRadius: "12px", fontSize: "14px", fontWeight: "600", textDecoration: "none", border: "1px solid #534AB7", width: "100%", textAlign: "center" }}>
-        View business page
-      </Link>
     </div>
   )
 
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
       <div style={{ background: "#534AB7", padding: "1rem 1.25rem", display: "flex", alignItems: "center", gap: "12px" }}>
-        <Link href={selectedBiz ? `/business/${selectedBiz.id}` : "/"} style={{ color: "white", fontSize: "20px", textDecoration: "none" }}>←</Link>
+        <div onClick={() => window.history.back()} style={{ color: "white", fontSize: "20px", cursor: "pointer" }}>←</div>
         <span style={{ fontSize: "16px", fontWeight: "600", color: "white" }}>Write a Review</span>
       </div>
 
@@ -229,9 +240,9 @@ function ReviewForm() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontWeight: "600", fontSize: "15px" }}>{selectedBiz.name}</div>
-                <div style={{ fontSize: "12px", color: "#888" }}>{selectedBiz.category} · {selectedBiz.city}</div>
+                <div style={{ fontSize: "12px", color: "#888" }}>{selectedBiz.category}</div>
               </div>
-              {!bizId && <div onClick={() => { setSelectedBiz(null); setContextTag("") }} style={{ fontSize: "12px", color: "#534AB7", cursor: "pointer", fontWeight: "600" }}>Change</div>}
+              {!bizId && !googlePlaceId && <div onClick={() => setSelectedBiz(null)} style={{ fontSize: "12px", color: "#534AB7", cursor: "pointer", fontWeight: "600" }}>Change</div>}
             </div>
           )}
         </div>
@@ -268,11 +279,6 @@ function ReviewForm() {
               {stars > 0 && stars <= 3 && (
                 <div style={{ marginTop: "10px", background: "#FAEEDA", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", color: "#854F0B", lineHeight: "1.5" }}>
                   ⏱ Reviews with 3 ✦ or under enter a 72-hour window where the business can reach out to resolve your experience before it goes public.
-                </div>
-              )}
-              {stars === 4 && (
-                <div style={{ marginTop: "10px", background: "#EEEDFE", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", color: "#3C3489", lineHeight: "1.5" }}>
-                  ✦ Your 4 ✦ review posts immediately. If the business reaches out and makes it right, you can upgrade it to 5 ✦ from your profile.
                 </div>
               )}
             </div>
@@ -340,13 +346,6 @@ function ReviewForm() {
             </div>
           </>
         )}
-      </div>
-
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-around", padding: "12px 0 20px" }}>
-        <Link href="/" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊞</span><span style={{ fontSize: "11px", color: "#888" }}>Home</span></Link>
-        <Link href="/post-review" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>⊕</span><span style={{ fontSize: "11px", color: "#534AB7", fontWeight: "600" }}>Review</span></Link>
-        <Link href="/influencers" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>✦</span><span style={{ fontSize: "11px", color: "#888" }}>Influencers</span></Link>
-        <Link href="/profile" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}><span style={{ fontSize: "20px" }}>◯</span><span style={{ fontSize: "11px", color: "#888" }}>Profile</span></Link>
       </div>
     </div>
   )
