@@ -5,7 +5,6 @@ export async function GET(request: Request) {
   const lat = searchParams.get("lat")
   const lng = searchParams.get("lng")
   const radius = searchParams.get("radius") || "5000"
-
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY
 
   try {
@@ -19,8 +18,9 @@ export async function GET(request: Request) {
           "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.photos,places.currentOpeningHours,places.priceLevel",
         },
         body: JSON.stringify({
-          includedTypes: ["restaurant", "cafe", "bar"],
+          includedTypes: ["restaurant"],
           maxResultCount: 20,
+          rankPreference: "DISTANCE",
           locationRestriction: {
             circle: {
               center: { latitude: parseFloat(lat!), longitude: parseFloat(lng!) },
@@ -30,7 +30,6 @@ export async function GET(request: Request) {
         }),
       }
     )
-
     const data = await response.json()
     return NextResponse.json(data)
   } catch (error: any) {
@@ -65,7 +64,6 @@ export async function POST(request: Request) {
         }),
       }
     )
-
     const data = await response.json()
     return NextResponse.json(data)
   } catch (error: any) {
