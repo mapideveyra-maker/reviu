@@ -222,7 +222,7 @@ export default function Home() {
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
 
     try {
-      const res = await fetch(`/api/places?lat=${location.lat}&lng=${location.lng}&radius=${nextRadius * 1609}${typesParam}`)
+      const res = await fetch(`/api/places?lat=${location.lat}&lng=${location.lng}&radius=${nextRadius * 1609}&minRadius=${radius * 1609}${typesParam}`)
       const data = await res.json()
       const newPlaces = (data.places || [])
         .filter((p: any) => !seenIdsRef.current.has(p.id))

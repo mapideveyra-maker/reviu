@@ -45,6 +45,15 @@ async function nearbySearch(
   return data.places || []
 }
 
+function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 function qualityFilter(places: any[]): any[] {
   return places.filter(
     (p: any) =>
@@ -73,6 +82,7 @@ export async function GET(request: Request) {
   const lat = parseFloat(searchParams.get("lat")!)
   const lng = parseFloat(searchParams.get("lng")!)
   const radius = parseFloat(searchParams.get("radius") || "5000")
+  const minRadius = parseFloat(searchParams.get("minRadius") || "0")
   const typesParam = searchParams.get("types")
   const includedTypes = typesParam ? typesParam.split(",").filter(Boolean) : []
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY!
@@ -94,8 +104,14 @@ export async function GET(request: Request) {
     }
 
     const deduped = dedup(batches)
-    const places = qualityFilter(deduped)
-    console.log(`[places GET] types=${JSON.stringify(includedTypes)} radius=${radius}m raw=${deduped.length} after_filter=${places.length}`)
+    const quality = qualityFilter(deduped)
+    const places = minRadius > 0
+      ? quality.filter(p =>
+          !p.location?.latitude || !p.location?.longitude ||
+          distanceMeters(lat, lng, p.location.latitude, p.location.longitude) >= minRadius
+        )
+      : quality
+    console.log(`[places GET] types=${JSON.stringify(includedTypes)} radius=${radius}m minRadius=${minRadius}m raw=${deduped.length} quality=${quality.length} ring=${places.length}`)
     return NextResponse.json({ places })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
