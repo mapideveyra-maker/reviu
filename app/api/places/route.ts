@@ -17,7 +17,7 @@ export async function GET(request: Request) {
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": apiKey!,
-          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.photos,places.currentOpeningHours,places.priceLevel",
+          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.photos,places.currentOpeningHours,places.priceLevel,places.businessStatus",
         },
         body: JSON.stringify({
           ...(includedTypes.length > 0 && { includedTypes }),
@@ -33,7 +33,10 @@ export async function GET(request: Request) {
       }
     )
     const data = await response.json()
-    return NextResponse.json(data)
+    const places = (data.places || []).filter(
+      (p: any) => p.businessStatus !== "CLOSED_PERMANENTLY"
+    )
+    return NextResponse.json({ places })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
@@ -51,7 +54,7 @@ export async function POST(request: Request) {
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": apiKey!,
-          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.photos,places.currentOpeningHours,places.priceLevel",
+          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.photos,places.currentOpeningHours,places.priceLevel,places.businessStatus",
         },
         body: JSON.stringify({
           textQuery: query,
@@ -67,7 +70,10 @@ export async function POST(request: Request) {
       }
     )
     const data = await response.json()
-    return NextResponse.json(data)
+    const places = (data.places || []).filter(
+      (p: any) => p.businessStatus !== "CLOSED_PERMANENTLY"
+    )
+    return NextResponse.json({ places })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

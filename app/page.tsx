@@ -212,7 +212,7 @@ export default function Home() {
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function getFilterTypes(filterKey: string) {
     return FILTERS.find(f => f.key === filterKey)?.types ?? []

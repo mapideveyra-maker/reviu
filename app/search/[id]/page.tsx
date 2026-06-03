@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import Link from "next/link"
 import BackButton from "../../BackButton"
 import ReviewsList from "../../ReviewsList"
+import ReportButton from "./ReportButton"
 
 async function getGooglePlace(placeId: string) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY
@@ -185,6 +186,8 @@ export default async function GooglePlacePage({ params }: { params: Promise<{ id
           Write a review
         </Link>
       </div>
+
+      <ReportButton placeId={id} placeName={place.displayName?.text || ""} />
 
     </main>
   )
