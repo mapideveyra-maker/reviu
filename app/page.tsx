@@ -230,9 +230,9 @@ export default function Home() {
         .sort((a: any, b: any) => a.distance - b.distance)
       newPlaces.forEach((p: any) => seenIdsRef.current.add(p.id))
       setPlaces(prev => [...prev, ...newPlaces])
+      setRadius(nextRadius)
     } catch { /* silent */ }
 
-    setRadius(nextRadius)
     setLoadingMore(false)
   }
 
