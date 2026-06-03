@@ -22,16 +22,16 @@ function getPhotoUrl(photoName: string) {
 
 function getCategoryFromTypes(types: string[]) {
   if (types.includes("fine_dining_restaurant")) return "Fine Dining"
-  if (types.includes("italian_restaurant")) return "Italian Restaurant"
-  if (types.includes("mexican_restaurant")) return "Mexican Restaurant"
-  if (types.includes("chinese_restaurant") || types.includes("japanese_restaurant") || types.includes("asian_restaurant")) return "Asian Restaurant"
+  if (types.includes("italian_restaurant")) return "Italian"
+  if (types.includes("mexican_restaurant")) return "Mexican"
+  if (types.includes("chinese_restaurant") || types.includes("japanese_restaurant") || types.includes("asian_restaurant")) return "Asian"
   if (types.includes("sushi_restaurant")) return "Sushi"
-  if (types.includes("thai_restaurant")) return "Thai Restaurant"
-  if (types.includes("indian_restaurant")) return "Indian Restaurant"
-  if (types.includes("greek_restaurant")) return "Greek Restaurant"
+  if (types.includes("thai_restaurant")) return "Thai"
+  if (types.includes("indian_restaurant")) return "Indian"
+  if (types.includes("greek_restaurant")) return "Greek"
   if (types.includes("mediterranean_restaurant")) return "Mediterranean"
-  if (types.includes("french_restaurant")) return "French Restaurant"
-  if (types.includes("american_restaurant")) return "American Restaurant"
+  if (types.includes("french_restaurant")) return "French"
+  if (types.includes("american_restaurant")) return "American"
   if (types.includes("pizza_restaurant")) return "Pizza"
   if (types.includes("burger_restaurant") || types.includes("hamburger_restaurant")) return "Burgers"
   if (types.includes("sandwich_shop")) return "Sandwiches"
@@ -48,37 +48,27 @@ function getCategoryFromTypes(types: string[]) {
   if (types.includes("bakery")) return "Bakery"
   if (types.includes("ice_cream_shop")) return "Ice Cream"
   if (types.includes("dessert_shop")) return "Desserts"
-  if (types.includes("clothing_store")) return "Clothing Store"
-  if (types.includes("shoe_store")) return "Shoe Store"
-  if (types.includes("jewelry_store")) return "Jewelry"
-  if (types.includes("book_store") || types.includes("bookstore")) return "Bookstore"
-  if (types.includes("electronics_store")) return "Electronics"
   if (types.includes("grocery_store") || types.includes("supermarket")) return "Grocery"
-  if (types.includes("department_store")) return "Department Store"
   if (types.includes("convenience_store")) return "Convenience Store"
+  if (types.includes("clothing_store")) return "Clothing"
+  if (types.includes("shoe_store")) return "Shoes"
+  if (types.includes("jewelry_store")) return "Jewelry"
+  if (types.includes("book_store") || types.includes("bookstore")) return "Books"
+  if (types.includes("electronics_store")) return "Electronics"
   if (types.includes("shopping_mall")) return "Shopping Mall"
-  if (types.includes("gift_shop")) return "Gift Shop"
-  if (types.includes("florist")) return "Florist"
-  if (types.includes("furniture_store")) return "Furniture"
-  if (types.includes("hardware_store")) return "Hardware"
-  if (types.includes("pet_store")) return "Pet Store"
   if (types.includes("pharmacy") || types.includes("drug_store") || types.includes("drugstore")) return "Pharmacy"
   if (types.includes("gym") || types.includes("fitness_center")) return "Gym"
   if (types.includes("spa")) return "Spa"
-  if (types.includes("hair_care") || types.includes("hair_salon") || types.includes("salon")) return "Hair Salon"
+  if (types.includes("hair_care") || types.includes("hair_salon")) return "Hair Salon"
   if (types.includes("nail_salon")) return "Nail Salon"
   if (types.includes("barber_shop")) return "Barbershop"
-  if (types.includes("doctor") || types.includes("medical_clinic")) return "Medical"
+  if (types.includes("beauty_salon")) return "Beauty Salon"
   if (types.includes("dentist")) return "Dentist"
+  if (types.includes("doctor") || types.includes("medical_clinic")) return "Medical"
   if (types.includes("hospital")) return "Hospital"
   if (types.includes("movie_theater")) return "Movie Theater"
-  if (types.includes("bowling_alley")) return "Bowling"
   if (types.includes("museum")) return "Museum"
   if (types.includes("art_gallery")) return "Art Gallery"
-  if (types.includes("amusement_park")) return "Amusement Park"
-  if (types.includes("zoo")) return "Zoo"
-  if (types.includes("aquarium")) return "Aquarium"
-  if (types.includes("stadium")) return "Stadium"
   if (types.includes("hotel") || types.includes("lodging")) return "Hotel"
   if (types.includes("bank")) return "Bank"
   if (types.includes("gas_station")) return "Gas Station"
@@ -88,7 +78,6 @@ function getCategoryFromTypes(types: string[]) {
   if (types.includes("restaurant")) return "Restaurant"
   if (types.includes("food")) return "Food & Drink"
   if (types.includes("store")) return "Shop"
-  if (types.includes("tourist_attraction")) return "Attraction"
   return "Place"
 }
 
@@ -132,6 +121,38 @@ const FILTERS = [
 
 const RADIUS_STEPS = [3, 5, 10]
 
+function PlaceCard({ place, index }: { place: any; index: number }) {
+  const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
+  const category = getCategoryFromTypes(place.types || [])
+  const isOpen = place.currentOpeningHours?.openNow
+  const dist = place.distance
+  return (
+    <Link href={`/search/${place.id}`} style={{ textDecoration: "none", display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee", background: "white" }}>
+      <div style={{ width: "64px", height: "64px", borderRadius: "14px", overflow: "hidden", flexShrink: 0, background: "#f0f0f0" }}>
+        <img src={photo} alt={place.displayName?.text} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{place.displayName?.text}</div>
+        <div style={{ fontSize: "12px", color: "#888", marginBottom: "5px" }}>{category}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          {place.rating && (
+            <span style={{ fontSize: "11px", color: "#534AB7", fontWeight: "700" }}>✦ {place.rating}</span>
+          )}
+          {isOpen !== undefined && (
+            <span style={{ fontSize: "11px", fontWeight: "600", color: isOpen ? "#3B6D11" : "#A32D2D" }}>
+              {isOpen ? "Open" : "Closed"}
+            </span>
+          )}
+          {dist < 999 && (
+            <span style={{ fontSize: "11px", color: "#aaa" }}>{dist < 0.1 ? "Here" : `${dist.toFixed(1)} mi`}</span>
+          )}
+        </div>
+      </div>
+      <span style={{ color: "#ccc", fontSize: "20px", flexShrink: 0 }}>›</span>
+    </Link>
+  )
+}
+
 export default function Home() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [locationError, setLocationError] = useState(false)
@@ -151,16 +172,24 @@ export default function Home() {
 
   const seenIdsRef = useRef(new Set<string>())
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const loadMoreCallbackRef = useRef<() => void>(() => {})
+  const loadingMoreRef = useRef(false)
+  const hasMoreRef = useRef(true)
+  const radiusRef = useRef(RADIUS_STEPS[0])
+  const activeFilterRef = useRef("food")
+  const locationRef = useRef<{ lat: number; lng: number } | null>(null)
+  const searchRef = useRef("")
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => { hasMoreRef.current = hasMore }, [hasMore])
+  useEffect(() => { radiusRef.current = radius }, [radius])
+  useEffect(() => { activeFilterRef.current = activeFilter }, [activeFilter])
+  useEffect(() => { locationRef.current = location }, [location])
+  useEffect(() => { searchRef.current = search }, [search])
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {
-        setLocationError(true)
-        setLocation({ lat: 39.1031, lng: -84.5120 })
-      }
+      () => { setLocationError(true); setLocation({ lat: 39.1031, lng: -84.5120 }) }
     )
   }, [])
 
@@ -169,21 +198,38 @@ export default function Home() {
     initialLoad(location, activeFilter)
   }, [location, activeFilter])
 
+  // Sentinel observer — set up once, uses refs for all state
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      entries => {
+        if (!entries[0].isIntersecting) return
+        if (loadingMoreRef.current || !hasMoreRef.current || !locationRef.current || searchRef.current.trim()) return
+        loadMore()
+      },
+      { rootMargin: "200px", threshold: 0 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   function getFilterTypes(filterKey: string) {
     return FILTERS.find(f => f.key === filterKey)?.types ?? []
   }
 
   async function initialLoad(loc: { lat: number; lng: number }, filterKey: string) {
     setLoading(true)
+    setLoadingMore(false)
+    loadingMoreRef.current = false
     seenIdsRef.current = new Set()
     setAllGooglePlaces([])
     setRadius(RADIUS_STEPS[0])
+    radiusRef.current = RADIUS_STEPS[0]
     setHasMore(true)
+    hasMoreRef.current = true
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
     const radiusMeters = RADIUS_STEPS[0] * 1609
     const types = getFilterTypes(filterKey)
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
@@ -195,85 +241,78 @@ export default function Home() {
     ])
 
     const placesData = await placesRes.json()
-    const places = (placesData.places || []).map((p: any) => ({
-      ...p,
-      distance: p.location ? getDistance(loc.lat, loc.lng, p.location.latitude, p.location.longitude) : 999,
-    })).sort((a: any, b: any) => a.distance - b.distance)
+    const places = (placesData.places || [])
+      .map((p: any) => ({ ...p, distance: p.location ? getDistance(loc.lat, loc.lng, p.location.latitude, p.location.longitude) : 999 }))
+      .sort((a: any, b: any) => a.distance - b.distance)
 
     places.forEach((p: any) => seenIdsRef.current.add(p.id))
     setAllGooglePlaces(places)
     setReviews(reviewRes.data || [])
     setSpecials(specialsRes.data || [])
-    setHasMore(places.length >= 15)
+
+    const more = places.length >= 18
+    setHasMore(more)
+    hasMoreRef.current = more
     setLoading(false)
   }
 
-  const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore || !location || search.trim()) return
-    const currentIndex = RADIUS_STEPS.indexOf(radius)
-    if (currentIndex === -1 || currentIndex >= RADIUS_STEPS.length - 1) {
+  async function loadMore() {
+    if (loadingMoreRef.current || !hasMoreRef.current || !locationRef.current || searchRef.current.trim()) return
+    const currentIndex = RADIUS_STEPS.indexOf(radiusRef.current)
+    if (currentIndex < 0 || currentIndex >= RADIUS_STEPS.length - 1) {
       setHasMore(false)
+      hasMoreRef.current = false
       return
     }
     const nextRadius = RADIUS_STEPS[currentIndex + 1]
+
+    loadingMoreRef.current = true
     setLoadingMore(true)
 
-    const types = getFilterTypes(activeFilter)
+    const types = getFilterTypes(activeFilterRef.current)
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
-    const res = await fetch(`/api/places?lat=${location.lat}&lng=${location.lng}&radius=${nextRadius * 1609}${typesParam}`)
-    const data = await res.json()
-    const newPlaces = (data.places || [])
-      .filter((p: any) => !seenIdsRef.current.has(p.id))
-      .map((p: any) => ({
-        ...p,
-        distance: p.location ? getDistance(location.lat, location.lng, p.location.latitude, p.location.longitude) : 999,
-      }))
-      .sort((a: any, b: any) => a.distance - b.distance)
+    const loc = locationRef.current!
 
-    newPlaces.forEach((p: any) => seenIdsRef.current.add(p.id))
-    setAllGooglePlaces(prev => [...prev, ...newPlaces])
+    try {
+      const res = await fetch(`/api/places?lat=${loc.lat}&lng=${loc.lng}&radius=${nextRadius * 1609}${typesParam}`)
+      const data = await res.json()
+      const newPlaces = (data.places || [])
+        .filter((p: any) => !seenIdsRef.current.has(p.id))
+        .map((p: any) => ({ ...p, distance: p.location ? getDistance(loc.lat, loc.lng, p.location.latitude, p.location.longitude) : 999 }))
+        .sort((a: any, b: any) => a.distance - b.distance)
+
+      newPlaces.forEach((p: any) => seenIdsRef.current.add(p.id))
+      setAllGooglePlaces(prev => [...prev, ...newPlaces])
+    } catch { /* silent */ }
+
     setRadius(nextRadius)
-    setHasMore(nextRadius < RADIUS_STEPS[RADIUS_STEPS.length - 1])
+    radiusRef.current = nextRadius
+    const more = nextRadius < RADIUS_STEPS[RADIUS_STEPS.length - 1]
+    setHasMore(more)
+    hasMoreRef.current = more
+    loadingMoreRef.current = false
     setLoadingMore(false)
-  }, [loadingMore, hasMore, location, radius, activeFilter, search])
-
-  useEffect(() => { loadMoreCallbackRef.current = loadMore }, [loadMore])
-
-  useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (!sentinel || loading) return
-    const observer = new IntersectionObserver(
-      entries => { if (entries[0].isIntersecting) loadMoreCallbackRef.current() },
-      { rootMargin: "300px" }
-    )
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [loading])
+  }
 
   function handleSearch(text: string) {
     setSearch(text)
+    searchRef.current = text
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
-    if (!text.trim()) {
-      setSearchResults([])
-      setSearching(false)
-      return
-    }
+    if (!text.trim()) { setSearchResults([]); setSearching(false); return }
     setSearching(true)
     searchDebounceRef.current = setTimeout(async () => {
       try {
         const res = await fetch("/api/places", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: text, lat: location?.lat, lng: location?.lng }),
+          body: JSON.stringify({ query: text, lat: locationRef.current?.lat, lng: locationRef.current?.lng }),
         })
         const data = await res.json()
-        const results = (data.places || []).map((p: any) => ({
+        const loc = locationRef.current
+        setSearchResults((data.places || []).map((p: any) => ({
           ...p,
-          distance: p.location && location
-            ? getDistance(location.lat, location.lng, p.location.latitude, p.location.longitude)
-            : 999,
-        }))
-        setSearchResults(results)
+          distance: p.location && loc ? getDistance(loc.lat, loc.lng, p.location.latitude, p.location.longitude) : 999,
+        })))
       } catch { setSearchResults([]) }
       setSearching(false)
     }, 400)
@@ -282,24 +321,19 @@ export default function Home() {
   const isSearching = search.trim().length > 0
   const mapPlaces = isSearching ? searchResults : allGooglePlaces
 
-  // Build feed items (only used when not searching)
   const feedItems: any[] = []
-  if (!isSearching) {
-    specials.forEach((biz: any) => {
-      feedItems.push({ type: "special", biz, distance: 0 })
-    })
+  if (!isSearching && location) {
+    specials.forEach((biz: any) => feedItems.push({ type: "special", biz, distance: 0 }))
     reviews.forEach((review: any) => {
       const biz = review.businesses
       let dist = 999
       if (biz?.latitude && biz?.longitude) {
-        dist = getDistance(location!.lat, location!.lng, parseFloat(biz.latitude), parseFloat(biz.longitude))
+        dist = getDistance(location.lat, location.lng, parseFloat(biz.latitude), parseFloat(biz.longitude))
         if (dist > radius) return
       }
       feedItems.push({ type: "review", review, distance: dist })
     })
-    allGooglePlaces.forEach((place: any) => {
-      feedItems.push({ type: "google_place", place, distance: place.distance })
-    })
+    allGooglePlaces.forEach((place: any) => feedItems.push({ type: "google_place", place, distance: place.distance }))
     feedItems.sort((a, b) => {
       if (a.type === "special" && b.type !== "special") return -1
       if (b.type === "special" && a.type !== "special") return 1
@@ -322,82 +356,67 @@ export default function Home() {
       {selectedPhoto && (
         <div onClick={() => setSelectedPhoto(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.95)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
           <div style={{ position: "absolute", top: "16px", right: "16px", color: "white", fontSize: "28px", cursor: "pointer" }}>✕</div>
-          <img src={selectedPhoto} alt="Full size" style={{ maxWidth: "100%", maxHeight: "90vh", borderRadius: "12px", objectFit: "contain" }} onClick={e => e.stopPropagation()} />
+          <img src={selectedPhoto} alt="" style={{ maxWidth: "100%", maxHeight: "90vh", borderRadius: "12px", objectFit: "contain" }} onClick={e => e.stopPropagation()} />
         </div>
       )}
 
       {selectedPin && (
         <div onClick={() => setSelectedPin(null)} style={{ position: "fixed", inset: 0, zIndex: 500 }}>
-          <div onClick={e => e.stopPropagation()} style={{ position: "absolute", bottom: "90px", left: "50%", transform: "translateX(-50%)", width: "90%", maxWidth: "380px", background: "white", borderRadius: "16px", padding: "16px", boxShadow: "0 8px 30px rgba(0,0,0,0.2)" }}>
+          <div onClick={e => e.stopPropagation()} style={{ position: "absolute", bottom: "90px", left: "50%", transform: "translateX(-50%)", width: "90%", maxWidth: "390px", background: "white", borderRadius: "18px", padding: "18px", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
             <Link href={`/search/${selectedPin.id}`} style={{ textDecoration: "none" }}>
               <div style={{ fontSize: "15px", fontWeight: "700", color: "#111", marginBottom: "4px" }}>{selectedPin.displayName?.text}</div>
-              <div style={{ fontSize: "12px", color: "#888", marginBottom: "8px" }}>{getCategoryFromTypes(selectedPin.types || [])} · {selectedPin.distance?.toFixed(1)} mi away</div>
-              <div style={{ fontSize: "12px", color: "#534AB7", fontWeight: "600" }}>View on Reviu →</div>
+              <div style={{ fontSize: "12px", color: "#888", marginBottom: "10px" }}>{getCategoryFromTypes(selectedPin.types || [])} · {selectedPin.distance?.toFixed(1)} mi away</div>
+              <div style={{ background: "#534AB7", color: "white", fontSize: "13px", fontWeight: "600", padding: "8px 16px", borderRadius: "10px", textAlign: "center" }}>View on Reviu →</div>
             </Link>
           </div>
         </div>
       )}
 
-      {/* Header */}
-      <div style={{ background: "#534AB7", padding: "1rem 1.25rem 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div>
-          <div style={{ fontSize: "22px", fontWeight: "700", color: "white", letterSpacing: "-0.5px" }}>Reviu</div>
-          <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", marginTop: "1px" }}>
-            {locationError ? "Cincinnati, OH" : isSearching ? "Global search" : `Within ${radius} miles of you`}
+      {/* Purple header */}
+      <div style={{ background: "#534AB7" }}>
+        <div style={{ padding: "1rem 1.25rem 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: "22px", fontWeight: "700", color: "white", letterSpacing: "-0.5px" }}>Reviu</div>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)", marginTop: "1px" }}>
+              {isSearching ? "Global search" : locationError ? "Cincinnati, OH" : `Within ${radius} mi of you`}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <Link href="/post-review" style={{ background: "rgba(255,255,255,0.18)", color: "white", fontSize: "12px", fontWeight: "600", padding: "6px 14px", borderRadius: "20px", textDecoration: "none" }}>
+              + Review
+            </Link>
+            <Link href="/profile" style={{ width: "34px", height: "34px", borderRadius: "50%", background: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>
+              <span style={{ fontSize: "16px", color: "white" }}>◯</span>
+            </Link>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <Link href="/post-review" style={{ background: "rgba(255,255,255,0.15)", color: "white", fontSize: "12px", fontWeight: "600", padding: "6px 14px", borderRadius: "20px", textDecoration: "none" }}>
-            + Review
-          </Link>
-          <Link href="/profile" style={{ width: "32px", height: "32px", borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>
-            <span style={{ fontSize: "16px", color: "white" }}>◯</span>
-          </Link>
-        </div>
-      </div>
 
-      {/* Filter tabs */}
-      <div style={{ background: "#534AB7", padding: "10px 0 0" }}>
-        <div style={{ display: "flex", gap: "8px", overflowX: "auto", padding: "0 1.25rem 10px", scrollbarWidth: "none" }}>
-          <style>{`div::-webkit-scrollbar { display: none; }`}</style>
+        {/* Filter tabs */}
+        <div style={{ display: "flex", gap: "8px", overflowX: "auto", padding: "12px 1.25rem 0", scrollbarWidth: "none" }}>
+          <style>{`
+            .filter-scroll::-webkit-scrollbar { display: none; }
+            input::placeholder { color: rgba(255,255,255,0.5) !important; }
+          `}</style>
           {FILTERS.map(f => (
-            <button
-              key={f.key}
-              onClick={() => { setActiveFilter(f.key); setSearch(""); setSearchResults([]) }}
-              style={{
-                flexShrink: 0,
-                padding: "6px 16px",
-                borderRadius: "20px",
-                fontSize: "13px",
-                fontWeight: "600",
-                cursor: "pointer",
-                border: "none",
-                background: activeFilter === f.key && !isSearching ? "white" : "rgba(255,255,255,0.15)",
-                color: activeFilter === f.key && !isSearching ? "#534AB7" : "white",
-                transition: "background 0.15s",
-              }}
-            >
+            <button key={f.key} onClick={() => { setActiveFilter(f.key); setSearch(""); setSearchResults([]) }}
+              style={{ flexShrink: 0, padding: "6px 16px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", cursor: "pointer", border: "none", outline: "none",
+                background: activeFilter === f.key && !isSearching ? "white" : "rgba(255,255,255,0.18)",
+                color: activeFilter === f.key && !isSearching ? "#534AB7" : "white" }}>
               {f.label}
             </button>
           ))}
         </div>
 
         {/* Search bar */}
-        <div style={{ padding: "0 1.25rem 12px", position: "relative" }}>
-          <div style={{ position: "absolute", left: "1.75rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.6)", fontSize: "14px", pointerEvents: "none" }}>🔍</div>
-          <input
-            type="text"
-            value={search}
-            onChange={e => handleSearch(e.target.value)}
+        <div style={{ padding: "10px 1.25rem 14px", position: "relative" }}>
+          <span style={{ position: "absolute", left: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "14px", pointerEvents: "none", color: "rgba(255,255,255,0.5)" }}>🔍</span>
+          <input type="text" value={search} onChange={e => handleSearch(e.target.value)}
             placeholder="Search any place worldwide..."
-            style={{ width: "100%", padding: "10px 16px 10px 36px", borderRadius: "12px", border: "none", fontSize: "14px", background: "rgba(255,255,255,0.15)", color: "white", boxSizing: "border-box", outline: "none" }}
-          />
-          <style>{`input::placeholder { color: rgba(255,255,255,0.55); }`}</style>
-          {searching && (
-            <div style={{ position: "absolute", right: "1.75rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.7)", fontSize: "11px" }}>Searching...</div>
-          )}
+            style={{ width: "100%", padding: "10px 40px 10px 36px", borderRadius: "12px", border: "none", fontSize: "14px", background: "rgba(255,255,255,0.15)", color: "white", boxSizing: "border-box", outline: "none" }} />
+          {searching && <span style={{ position: "absolute", right: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>Searching…</span>}
           {isSearching && !searching && (
-            <div onClick={() => { setSearch(""); setSearchResults([]) }} style={{ position: "absolute", right: "1.75rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.7)", fontSize: "16px", cursor: "pointer" }}>✕</div>
+            <span onClick={() => { setSearch(""); searchRef.current = ""; setSearchResults([]) }}
+              style={{ position: "absolute", right: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "18px", color: "rgba(255,255,255,0.6)", cursor: "pointer", lineHeight: 1 }}>✕</span>
           )}
         </div>
       </div>
@@ -405,151 +424,103 @@ export default function Home() {
       {/* Map */}
       {location && mapPlaces.length > 0 && (
         <div style={{ position: "relative" }}>
-          <FeedMap
-            userLocation={location}
-            places={mapPlaces}
-            onPinSelect={setSelectedPin}
-          />
-          <div style={{ position: "absolute", bottom: "10px", left: "10px", background: "white", fontSize: "11px", fontWeight: "600", color: "#534AB7", padding: "4px 10px", borderRadius: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.15)", zIndex: 400 }}>
-            {isSearching ? `${searchResults.length} results` : `${allGooglePlaces.length} spots within ${radius} mi`}
+          <FeedMap userLocation={location} places={mapPlaces} onPinSelect={setSelectedPin} />
+          <div style={{ position: "absolute", bottom: "10px", left: "10px", background: "white", fontSize: "11px", fontWeight: "600", color: "#534AB7", padding: "4px 10px", borderRadius: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.12)", zIndex: 400 }}>
+            {isSearching ? `${searchResults.length} results` : `${allGooglePlaces.length} spots · ${radius} mi`}
           </div>
         </div>
       )}
 
-      {/* Feed */}
+      {/* Feed content */}
       <div>
-        {/* Search results */}
-        {isSearching && (
-          <>
-            {searchResults.length === 0 && !searching && (
-              <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
-                <div style={{ fontSize: "32px", marginBottom: "8px" }}>🔍</div>
-                <div style={{ fontSize: "14px", color: "#888" }}>No results for "{search}"</div>
-              </div>
-            )}
-            {searchResults.map(place => {
-              const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
-              const category = getCategoryFromTypes(place.types || [])
-              const isOpen = place.currentOpeningHours?.openNow
-              const dist = place.distance
-              return (
-                <Link key={`search-${place.id}`} href={`/search/${place.id}`} style={{ textDecoration: "none", display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee" }}>
-                  <div style={{ width: "60px", height: "60px", borderRadius: "14px", overflow: "hidden", flexShrink: 0 }}>
-                    <img src={photo} alt={place.displayName?.text} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px" }}>{place.displayName?.text}</div>
-                    <div style={{ fontSize: "12px", color: "#888", marginBottom: "3px" }}>{place.formattedAddress}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      {place.rating && <span style={{ fontSize: "11px", color: "#534AB7", fontWeight: "600" }}>✦ {place.rating}</span>}
-                      {isOpen !== undefined && <span style={{ fontSize: "10px", color: isOpen ? "#3B6D11" : "#A32D2D", fontWeight: "600" }}>{isOpen ? "Open" : "Closed"}</span>}
-                      {dist < 999 && <span style={{ fontSize: "10px", color: "#888" }}>{dist < 0.1 ? "Right here" : `${dist.toFixed(1)} mi`}</span>}
-                    </div>
-                  </div>
-                  <span style={{ color: "#ddd", fontSize: "18px" }}>›</span>
-                </Link>
-              )
-            })}
-          </>
+
+        {/* Search mode */}
+        {isSearching && !searching && searchResults.length === 0 && (
+          <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
+            <div style={{ fontSize: "28px", marginBottom: "8px" }}>🔍</div>
+            <div style={{ fontSize: "14px", color: "#888" }}>No results for "{search}"</div>
+          </div>
+        )}
+        {isSearching && searchResults.map((place, i) => <PlaceCard key={place.id} place={place} index={i} />)}
+
+        {/* Normal mode */}
+        {!isSearching && feedItems.length === 0 && (
+          <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
+            <div style={{ fontSize: "28px", marginBottom: "8px" }}>📍</div>
+            <div style={{ fontSize: "14px", color: "#888" }}>Nothing nearby yet</div>
+          </div>
         )}
 
-        {/* Normal feed */}
-        {!isSearching && (
-          <>
-            {feedItems.length === 0 && (
-              <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
-                <div style={{ fontSize: "32px", marginBottom: "8px" }}>📍</div>
-                <div style={{ fontSize: "14px", color: "#888" }}>Nothing within {radius} miles yet</div>
-              </div>
-            )}
-
-            {feedItems.map((item) => {
-              if (item.type === "special") {
-                const biz = item.biz
-                return (
-                  <Link key={`special-${biz.id}`} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "block" }}>
-                    <div style={{ position: "relative", height: "200px" }}>
-                      <img src={biz.special_media_url || biz.cover_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.7) 100%)" }} />
-                      <div style={{ position: "absolute", top: "14px", left: "14px", background: "#534AB7", color: "white", fontSize: "10px", fontWeight: "700", padding: "4px 12px", borderRadius: "20px" }}>✦ SPECIAL TODAY</div>
-                      <div style={{ position: "absolute", bottom: "16px", left: "16px", right: "16px" }}>
-                        <div style={{ fontSize: "18px", fontWeight: "700", color: "white", marginBottom: "4px" }}>{biz.name}</div>
-                        <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.9)" }}>{biz.special_today}</div>
-                      </div>
-                    </div>
-                    <div style={{ height: "1px", background: "#eee" }} />
-                  </Link>
-                )
-              }
-
-              if (item.type === "review") {
-                const review = item.review
-                return (
-                  <div key={`review-${review.id}`} style={{ padding: "16px 1.25rem", borderBottom: "1px solid #eee" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: "#534AB7", flexShrink: 0 }}>
-                        {review.reviewer_initials || "R"}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: "13px", fontWeight: "600", color: "#111" }}>{review.reviewer_name}</div>
-                        <div style={{ fontSize: "11px", color: "#888" }}>
-                          reviewed <Link href={`/business/${review.business_id}`} style={{ color: "#534AB7", textDecoration: "none", fontWeight: "600" }}>{review.businesses?.name}</Link> · {new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: "1px" }}>
-                        {[1, 2, 3, 4, 5].map(s => (
-                          <span key={s} style={{ fontSize: "11px", color: s <= review.stars ? "#534AB7" : "#ddd" }}>✦</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: "14px", color: "#333", lineHeight: "1.6", marginBottom: review.media_urls?.length > 0 ? "12px" : "0" }}>
-                      {review.text?.slice(0, 200)}{review.text?.length > 200 ? "..." : ""}
-                    </div>
-                    {review.media_urls?.length > 0 && (
-                      <div style={{ display: "flex", gap: "6px", overflowX: "auto", marginLeft: "-1.25rem", paddingLeft: "1.25rem", paddingRight: "1.25rem", paddingBottom: "4px" }}>
-                        {review.media_urls.map((url: string, i: number) => (
-                          <img key={i} src={url} alt="Review photo" onClick={() => setSelectedPhoto(url)} style={{ width: "120px", height: "120px", objectFit: "cover", borderRadius: "12px", flexShrink: 0, cursor: "pointer" }} />
-                        ))}
-                      </div>
-                    )}
+        {!isSearching && feedItems.map((item) => {
+          if (item.type === "special") {
+            const biz = item.biz
+            return (
+              <Link key={`special-${biz.id}`} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "block" }}>
+                <div style={{ position: "relative", height: "200px" }}>
+                  <img src={biz.special_media_url || biz.cover_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.65) 100%)" }} />
+                  <div style={{ position: "absolute", top: "14px", left: "14px", background: "#534AB7", color: "white", fontSize: "10px", fontWeight: "700", padding: "4px 12px", borderRadius: "20px", letterSpacing: "0.5px" }}>✦ SPECIAL TODAY</div>
+                  <div style={{ position: "absolute", bottom: "16px", left: "16px", right: "16px" }}>
+                    <div style={{ fontSize: "18px", fontWeight: "700", color: "white", marginBottom: "4px" }}>{biz.name}</div>
+                    <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)" }}>{biz.special_today}</div>
                   </div>
-                )
-              }
+                </div>
+                <div style={{ height: "1px", background: "#eee" }} />
+              </Link>
+            )
+          }
 
-              if (item.type === "google_place") {
-                const place = item.place
-                const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
-                const category = getCategoryFromTypes(place.types || [])
-                const isOpen = place.currentOpeningHours?.openNow
-                const dist = item.distance
-                return (
-                  <Link key={`place-${place.id}`} href={`/search/${place.id}`} style={{ textDecoration: "none", display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee" }}>
-                    <div style={{ width: "60px", height: "60px", borderRadius: "14px", overflow: "hidden", flexShrink: 0 }}>
-                      <img src={photo} alt={place.displayName?.text} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          if (item.type === "review") {
+            const review = item.review
+            return (
+              <div key={`review-${review.id}`} style={{ padding: "16px 1.25rem", borderBottom: "1px solid #eee", background: "white" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                  <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: "#534AB7", flexShrink: 0 }}>
+                    {review.reviewer_initials || "R"}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "13px", fontWeight: "600", color: "#111" }}>{review.reviewer_name}</div>
+                    <div style={{ fontSize: "11px", color: "#888" }}>
+                      reviewed <Link href={`/business/${review.business_id}`} style={{ color: "#534AB7", textDecoration: "none", fontWeight: "600" }}>{review.businesses?.name}</Link>
+                      {" · "}{new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px" }}>{place.displayName?.text}</div>
-                      <div style={{ fontSize: "12px", color: "#888", marginBottom: "5px" }}>{category}</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        {isOpen !== undefined && <span style={{ fontSize: "10px", color: isOpen ? "#3B6D11" : "#A32D2D", fontWeight: "600" }}>{isOpen ? "Open" : "Closed"}</span>}
-                        {dist < 999 && <span style={{ fontSize: "10px", color: "#888" }}>{dist < 0.1 ? "Right here" : `${dist.toFixed(1)} mi away`}</span>}
-                      </div>
-                    </div>
-                    <span style={{ color: "#ddd", fontSize: "18px" }}>›</span>
-                  </Link>
-                )
-              }
+                  </div>
+                  <div style={{ display: "flex", gap: "2px", flexShrink: 0 }}>
+                    {[1, 2, 3, 4, 5].map(s => (
+                      <span key={s} style={{ fontSize: "11px", color: s <= review.stars ? "#534AB7" : "#e0e0e0" }}>✦</span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ fontSize: "14px", color: "#333", lineHeight: "1.6", marginBottom: review.media_urls?.length > 0 ? "12px" : 0 }}>
+                  {review.text?.slice(0, 220)}{review.text?.length > 220 ? "…" : ""}
+                </div>
+                {review.media_urls?.length > 0 && (
+                  <div style={{ display: "flex", gap: "6px", overflowX: "auto", marginLeft: "-1.25rem", paddingLeft: "1.25rem", paddingRight: "1.25rem", paddingBottom: "4px" }}>
+                    {review.media_urls.map((url: string, i: number) => (
+                      <img key={i} src={url} alt="" onClick={() => setSelectedPhoto(url)} style={{ width: "110px", height: "110px", objectFit: "cover", borderRadius: "10px", flexShrink: 0, cursor: "pointer" }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          }
 
-              return null
-            })}
+          if (item.type === "google_place") {
+            return <PlaceCard key={`place-${item.place.id}`} place={item.place} index={0} />
+          }
 
-            <div ref={sentinelRef} style={{ padding: "16px", textAlign: "center" }}>
-              {loadingMore && <div style={{ fontSize: "13px", color: "#888" }}>Loading more...</div>}
-              {!loadingMore && !hasMore && feedItems.length > 0 && (
-                <div style={{ fontSize: "13px", color: "#bbb" }}>You've seen everything within {radius} miles</div>
-              )}
-            </div>
-          </>
+          return null
+        })}
+
+        {/* Sentinel — always rendered so observer never needs to reconnect */}
+        <div ref={sentinelRef} style={{ height: "1px" }} />
+        {loadingMore && (
+          <div style={{ padding: "20px", textAlign: "center", fontSize: "13px", color: "#aaa" }}>Loading more…</div>
+        )}
+        {!loadingMore && !hasMore && (allGooglePlaces.length > 0 || isSearching) && (
+          <div style={{ padding: "24px", textAlign: "center", fontSize: "13px", color: "#ccc" }}>
+            {isSearching ? "End of search results" : `All spots within ${radius} miles shown`}
+          </div>
         )}
       </div>
     </div>
