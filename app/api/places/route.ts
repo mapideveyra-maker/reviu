@@ -34,7 +34,10 @@ export async function GET(request: Request) {
     )
     const data = await response.json()
     const places = (data.places || []).filter(
-      (p: any) => p.businessStatus !== "CLOSED_PERMANENTLY"
+      (p: any) =>
+        p.businessStatus !== "CLOSED_PERMANENTLY" &&
+        (p.userRatingCount ?? 0) >= 3 &&
+        p.formattedAddress?.trim()
     )
     return NextResponse.json({ places })
   } catch (error: any) {
@@ -71,7 +74,10 @@ export async function POST(request: Request) {
     )
     const data = await response.json()
     const places = (data.places || []).filter(
-      (p: any) => p.businessStatus !== "CLOSED_PERMANENTLY"
+      (p: any) =>
+        p.businessStatus !== "CLOSED_PERMANENTLY" &&
+        (p.userRatingCount ?? 0) >= 3 &&
+        p.formattedAddress?.trim()
     )
     return NextResponse.json({ places })
   } catch (error: any) {

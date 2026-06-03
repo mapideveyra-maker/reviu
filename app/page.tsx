@@ -198,7 +198,7 @@ export default function Home() {
     initialLoad(location, activeFilter)
   }, [location, activeFilter])
 
-  // Sentinel observer — set up once, uses refs for all state
+  // Create observer after loading=false so sentinel is in the DOM
   useEffect(() => {
     const sentinel = sentinelRef.current
     if (!sentinel) return
@@ -213,6 +213,20 @@ export default function Home() {
     observer.observe(sentinel)
     return () => observer.disconnect()
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // After each loadMore completes, re-check if sentinel is still visible.
+  // IntersectionObserver only fires on state *change*, so if content is sparse
+  // and the sentinel never leaves the viewport, the observer won't re-trigger.
+  useEffect(() => {
+    if (loadingMore) return
+    if (!hasMoreRef.current || !locationRef.current || searchRef.current.trim()) return
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const rect = sentinel.getBoundingClientRect()
+    if (rect.top <= window.innerHeight + 300) {
+      loadMore()
+    }
+  }, [loadingMore]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function getFilterTypes(filterKey: string) {
     return FILTERS.find(f => f.key === filterKey)?.types ?? []
@@ -250,9 +264,10 @@ export default function Home() {
     setReviews(reviewRes.data || [])
     setSpecials(specialsRes.data || [])
 
-    const more = places.length >= 18
-    setHasMore(more)
-    hasMoreRef.current = more
+    // Always try larger radii after the initial smallest-radius load.
+    // loadMore() terminates when RADIUS_STEPS is exhausted.
+    setHasMore(true)
+    hasMoreRef.current = true
     setLoading(false)
   }
 
