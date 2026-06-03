@@ -214,15 +214,18 @@ export default function Home() {
   }
 
   async function loadMore() {
+    console.log("loadMore called, radius=" + radius + " loadingMore=" + loadingMore)
     if (!location || loadingMore) return
     const nextRadius = radius + 3
     setLoadingMore(true)
 
     const types = getFilterTypes(activeFilter)
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
+    const url = `/api/places?lat=${location.lat}&lng=${location.lng}&radius=${nextRadius * 1609}&minRadius=${radius * 1609}${typesParam}`
 
     try {
-      const res = await fetch(`/api/places?lat=${location.lat}&lng=${location.lng}&radius=${nextRadius * 1609}&minRadius=${radius * 1609}${typesParam}`)
+      console.log("loadMore fetching:", url)
+      const res = await fetch(url)
       const data = await res.json()
       const newPlaces = (data.places || [])
         .filter((p: any) => !seenIdsRef.current.has(p.id))
@@ -231,9 +234,11 @@ export default function Home() {
       newPlaces.forEach((p: any) => seenIdsRef.current.add(p.id))
       setPlaces(prev => [...prev, ...newPlaces])
       setRadius(nextRadius)
-    } catch { /* silent */ }
-
-    setLoadingMore(false)
+    } catch (err) {
+      console.error("loadMore fetch failed:", err)
+    } finally {
+      setLoadingMore(false)
+    }
   }
 
   function handleSearch(text: string) {
