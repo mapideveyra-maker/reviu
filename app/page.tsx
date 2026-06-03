@@ -1,16 +1,19 @@
 "use client"
 import Link from "next/link"
-import { useState, useEffect } from "react"
+import dynamic from "next/dynamic"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { createClient } from "@supabase/supabase-js"
+
+const FeedMap = dynamic(() => import("./FeedMap"), { ssr: false })
 
 function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 3958.8
   const dLat = (lat2 - lat1) * Math.PI / 180
   const dLng = (lng2 - lng1) * Math.PI / 180
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng/2) * Math.sin(dLng/2)
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    Math.sin(dLng / 2) * Math.sin(dLng / 2)
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
 function getPhotoUrl(photoName: string) {
@@ -22,26 +25,134 @@ function getCategoryFromTypes(types: string[]) {
   if (types.includes("italian_restaurant")) return "Italian Restaurant"
   if (types.includes("mexican_restaurant")) return "Mexican Restaurant"
   if (types.includes("chinese_restaurant") || types.includes("japanese_restaurant") || types.includes("asian_restaurant")) return "Asian Restaurant"
+  if (types.includes("sushi_restaurant")) return "Sushi"
+  if (types.includes("thai_restaurant")) return "Thai Restaurant"
+  if (types.includes("indian_restaurant")) return "Indian Restaurant"
+  if (types.includes("greek_restaurant")) return "Greek Restaurant"
+  if (types.includes("mediterranean_restaurant")) return "Mediterranean"
+  if (types.includes("french_restaurant")) return "French Restaurant"
+  if (types.includes("american_restaurant")) return "American Restaurant"
   if (types.includes("pizza_restaurant")) return "Pizza"
   if (types.includes("burger_restaurant") || types.includes("hamburger_restaurant")) return "Burgers"
-  if (types.includes("brewery") || types.includes("brewpub")) return "Brewery"
-  if (types.includes("bar") || types.includes("cocktail_bar")) return "Bar"
-  if (types.includes("cafe") || types.includes("coffee_shop")) return "Cafe"
-  if (types.includes("breakfast_restaurant")) return "Breakfast"
-  if (types.includes("fast_food_restaurant")) return "Fast Food"
-  if (types.includes("steak_house")) return "Steakhouse"
+  if (types.includes("sandwich_shop")) return "Sandwiches"
   if (types.includes("seafood_restaurant")) return "Seafood"
-  return "Restaurant"
+  if (types.includes("steak_house")) return "Steakhouse"
+  if (types.includes("barbecue_restaurant")) return "BBQ"
+  if (types.includes("breakfast_restaurant") || types.includes("brunch_restaurant")) return "Breakfast"
+  if (types.includes("fast_food_restaurant")) return "Fast Food"
+  if (types.includes("vegetarian_restaurant") || types.includes("vegan_restaurant")) return "Vegetarian"
+  if (types.includes("brewery") || types.includes("brewpub")) return "Brewery"
+  if (types.includes("bar") || types.includes("cocktail_bar") || types.includes("wine_bar")) return "Bar"
+  if (types.includes("night_club")) return "Night Club"
+  if (types.includes("cafe") || types.includes("coffee_shop")) return "Cafe"
+  if (types.includes("bakery")) return "Bakery"
+  if (types.includes("ice_cream_shop")) return "Ice Cream"
+  if (types.includes("dessert_shop")) return "Desserts"
+  if (types.includes("clothing_store")) return "Clothing Store"
+  if (types.includes("shoe_store")) return "Shoe Store"
+  if (types.includes("jewelry_store")) return "Jewelry"
+  if (types.includes("book_store") || types.includes("bookstore")) return "Bookstore"
+  if (types.includes("electronics_store")) return "Electronics"
+  if (types.includes("grocery_store") || types.includes("supermarket")) return "Grocery"
+  if (types.includes("department_store")) return "Department Store"
+  if (types.includes("convenience_store")) return "Convenience Store"
+  if (types.includes("shopping_mall")) return "Shopping Mall"
+  if (types.includes("gift_shop")) return "Gift Shop"
+  if (types.includes("florist")) return "Florist"
+  if (types.includes("furniture_store")) return "Furniture"
+  if (types.includes("hardware_store")) return "Hardware"
+  if (types.includes("pet_store")) return "Pet Store"
+  if (types.includes("pharmacy") || types.includes("drug_store") || types.includes("drugstore")) return "Pharmacy"
+  if (types.includes("gym") || types.includes("fitness_center")) return "Gym"
+  if (types.includes("spa")) return "Spa"
+  if (types.includes("hair_care") || types.includes("hair_salon") || types.includes("salon")) return "Hair Salon"
+  if (types.includes("nail_salon")) return "Nail Salon"
+  if (types.includes("barber_shop")) return "Barbershop"
+  if (types.includes("doctor") || types.includes("medical_clinic")) return "Medical"
+  if (types.includes("dentist")) return "Dentist"
+  if (types.includes("hospital")) return "Hospital"
+  if (types.includes("movie_theater")) return "Movie Theater"
+  if (types.includes("bowling_alley")) return "Bowling"
+  if (types.includes("museum")) return "Museum"
+  if (types.includes("art_gallery")) return "Art Gallery"
+  if (types.includes("amusement_park")) return "Amusement Park"
+  if (types.includes("zoo")) return "Zoo"
+  if (types.includes("aquarium")) return "Aquarium"
+  if (types.includes("stadium")) return "Stadium"
+  if (types.includes("hotel") || types.includes("lodging")) return "Hotel"
+  if (types.includes("bank")) return "Bank"
+  if (types.includes("gas_station")) return "Gas Station"
+  if (types.includes("car_wash")) return "Car Wash"
+  if (types.includes("car_repair") || types.includes("auto_repair")) return "Auto Repair"
+  if (types.includes("laundry") || types.includes("laundromat")) return "Laundry"
+  if (types.includes("restaurant")) return "Restaurant"
+  if (types.includes("food")) return "Food & Drink"
+  if (types.includes("store")) return "Shop"
+  if (types.includes("tourist_attraction")) return "Attraction"
+  return "Place"
 }
 
+const FILTERS = [
+  {
+    key: "food",
+    label: "Food & Drink",
+    types: [
+      "restaurant", "cafe", "bar", "coffee_shop", "bakery", "night_club",
+      "brewery", "food_court", "ice_cream_shop", "dessert_shop",
+      "meal_delivery", "meal_takeaway", "fine_dining_restaurant",
+      "fast_food_restaurant", "pizza_restaurant", "hamburger_restaurant",
+      "seafood_restaurant", "steak_house", "sushi_restaurant",
+    ],
+  },
+  {
+    key: "hotels",
+    label: "Hotels",
+    types: ["hotel", "lodging", "hostel", "motel", "bed_and_breakfast", "resort_hotel", "extended_stay_hotel"],
+  },
+  {
+    key: "health",
+    label: "Health & Beauty",
+    types: [
+      "gym", "fitness_center", "spa", "hair_salon", "nail_salon",
+      "barber_shop", "beauty_salon", "pharmacy", "dentist", "doctor",
+      "hospital", "physiotherapist", "yoga_studio",
+    ],
+  },
+  {
+    key: "services",
+    label: "Services",
+    types: [
+      "bank", "gas_station", "car_wash", "car_repair", "laundry",
+      "post_office", "library", "grocery_store", "supermarket",
+      "convenience_store", "atm", "car_dealer", "insurance_agency",
+    ],
+  },
+  { key: "all", label: "All", types: [] },
+]
+
+const RADIUS_STEPS = [3, 5, 10]
+
 export default function Home() {
-  const [feedItems, setFeedItems] = useState<any[]>([])
-  const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null)
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [locationError, setLocationError] = useState(false)
-  const [radius, setRadius] = useState(3)
+  const [activeFilter, setActiveFilter] = useState("food")
+  const [search, setSearch] = useState("")
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searching, setSearching] = useState(false)
+  const [allGooglePlaces, setAllGooglePlaces] = useState<any[]>([])
+  const [reviews, setReviews] = useState<any[]>([])
+  const [specials, setSpecials] = useState<any[]>([])
+  const [radius, setRadius] = useState(RADIUS_STEPS[0])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
   const [selectedPin, setSelectedPin] = useState<any | null>(null)
+
+  const seenIdsRef = useRef(new Set<string>())
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const loadMoreCallbackRef = useRef<() => void>(() => {})
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -55,37 +166,128 @@ export default function Home() {
 
   useEffect(() => {
     if (!location) return
-    loadFeed()
-  }, [location, radius])
+    initialLoad(location, activeFilter)
+  }, [location, activeFilter])
 
-  async function loadFeed() {
+  function getFilterTypes(filterKey: string) {
+    return FILTERS.find(f => f.key === filterKey)?.types ?? []
+  }
+
+  async function initialLoad(loc: { lat: number; lng: number }, filterKey: string) {
     setLoading(true)
+    seenIdsRef.current = new Set()
+    setAllGooglePlaces([])
+    setRadius(RADIUS_STEPS[0])
+    setHasMore(true)
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
-    const radiusMeters = radius * 1609
+    const radiusMeters = RADIUS_STEPS[0] * 1609
+    const types = getFilterTypes(filterKey)
+    const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
+
     const [placesRes, reviewRes, specialsRes] = await Promise.all([
-      fetch(`/api/places?lat=${location!.lat}&lng=${location!.lng}&radius=${radiusMeters}`),
+      fetch(`/api/places?lat=${loc.lat}&lng=${loc.lng}&radius=${radiusMeters}${typesParam}`),
       supabase.from("reviews").select("*, businesses(name, category, cover_url, latitude, longitude)").eq("status", "published").order("created_at", { ascending: false }).limit(30),
       supabase.from("businesses").select("*").not("special_today", "is", null),
     ])
 
     const placesData = await placesRes.json()
-    const googlePlaces = (placesData.places || []).map((place: any) => ({
-      ...place,
-      distance: place.location ? getDistance(location!.lat, location!.lng, place.location.latitude, place.location.longitude) : 999
+    const places = (placesData.places || []).map((p: any) => ({
+      ...p,
+      distance: p.location ? getDistance(loc.lat, loc.lng, p.location.latitude, p.location.longitude) : 999,
     })).sort((a: any, b: any) => a.distance - b.distance)
 
-    const reviews = reviewRes.data || []
-    const specials = specialsRes.data || []
+    places.forEach((p: any) => seenIdsRef.current.add(p.id))
+    setAllGooglePlaces(places)
+    setReviews(reviewRes.data || [])
+    setSpecials(specialsRes.data || [])
+    setHasMore(places.length >= 15)
+    setLoading(false)
+  }
 
-    const items: any[] = []
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !location || search.trim()) return
+    const currentIndex = RADIUS_STEPS.indexOf(radius)
+    if (currentIndex === -1 || currentIndex >= RADIUS_STEPS.length - 1) {
+      setHasMore(false)
+      return
+    }
+    const nextRadius = RADIUS_STEPS[currentIndex + 1]
+    setLoadingMore(true)
 
+    const types = getFilterTypes(activeFilter)
+    const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
+    const res = await fetch(`/api/places?lat=${location.lat}&lng=${location.lng}&radius=${nextRadius * 1609}${typesParam}`)
+    const data = await res.json()
+    const newPlaces = (data.places || [])
+      .filter((p: any) => !seenIdsRef.current.has(p.id))
+      .map((p: any) => ({
+        ...p,
+        distance: p.location ? getDistance(location.lat, location.lng, p.location.latitude, p.location.longitude) : 999,
+      }))
+      .sort((a: any, b: any) => a.distance - b.distance)
+
+    newPlaces.forEach((p: any) => seenIdsRef.current.add(p.id))
+    setAllGooglePlaces(prev => [...prev, ...newPlaces])
+    setRadius(nextRadius)
+    setHasMore(nextRadius < RADIUS_STEPS[RADIUS_STEPS.length - 1])
+    setLoadingMore(false)
+  }, [loadingMore, hasMore, location, radius, activeFilter, search])
+
+  useEffect(() => { loadMoreCallbackRef.current = loadMore }, [loadMore])
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel || loading) return
+    const observer = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) loadMoreCallbackRef.current() },
+      { rootMargin: "300px" }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loading])
+
+  function handleSearch(text: string) {
+    setSearch(text)
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    if (!text.trim()) {
+      setSearchResults([])
+      setSearching(false)
+      return
+    }
+    setSearching(true)
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/places", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: text, lat: location?.lat, lng: location?.lng }),
+        })
+        const data = await res.json()
+        const results = (data.places || []).map((p: any) => ({
+          ...p,
+          distance: p.location && location
+            ? getDistance(location.lat, location.lng, p.location.latitude, p.location.longitude)
+            : 999,
+        }))
+        setSearchResults(results)
+      } catch { setSearchResults([]) }
+      setSearching(false)
+    }, 400)
+  }
+
+  const isSearching = search.trim().length > 0
+  const mapPlaces = isSearching ? searchResults : allGooglePlaces
+
+  // Build feed items (only used when not searching)
+  const feedItems: any[] = []
+  if (!isSearching) {
     specials.forEach((biz: any) => {
-      items.push({ type: "special", biz, createdAt: biz.updated_at || biz.created_at, distance: 0 })
+      feedItems.push({ type: "special", biz, distance: 0 })
     })
-
     reviews.forEach((review: any) => {
       const biz = review.businesses
       let dist = 999
@@ -93,38 +295,16 @@ export default function Home() {
         dist = getDistance(location!.lat, location!.lng, parseFloat(biz.latitude), parseFloat(biz.longitude))
         if (dist > radius) return
       }
-      items.push({ type: "review", review, createdAt: review.created_at, distance: dist })
+      feedItems.push({ type: "review", review, distance: dist })
     })
-
-    googlePlaces.forEach((place: any) => {
-      items.push({ type: "google_place", place, createdAt: new Date().toISOString(), distance: place.distance })
+    allGooglePlaces.forEach((place: any) => {
+      feedItems.push({ type: "google_place", place, distance: place.distance })
     })
-
-    items.sort((a, b) => {
+    feedItems.sort((a, b) => {
       if (a.type === "special" && b.type !== "special") return -1
       if (b.type === "special" && a.type !== "special") return 1
       return a.distance - b.distance
     })
-
-    setFeedItems(items)
-    setLoading(false)
-  }
-
-  const googlePlaceItems = feedItems.filter(i => i.type === "google_place")
-
-  function buildStaticMapUrl() {
-    if (!location) return ""
-    const key = process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY
-    const center = `${location.lat},${location.lng}`
-    let markers = `&markers=color:blue%7Csize:mid%7C${center}`
-    googlePlaceItems.slice(0, 10).forEach((item: any) => {
-      const lat = item.place.location?.latitude
-      const lng = item.place.location?.longitude
-      if (lat && lng) {
-        markers += `&markers=color:0x534AB7%7C${lat},${lng}`
-      }
-    })
-    return `https://maps.googleapis.com/maps/api/staticmap?center=${center}&zoom=14&size=430x220&scale=2${markers}&key=${key}`
   }
 
   if (loading) return (
@@ -158,11 +338,12 @@ export default function Home() {
         </div>
       )}
 
-      <div style={{ background: "#534AB7", padding: "1rem 1.25rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      {/* Header */}
+      <div style={{ background: "#534AB7", padding: "1rem 1.25rem 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: "22px", fontWeight: "700", color: "white", letterSpacing: "-0.5px" }}>Reviu</div>
           <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", marginTop: "1px" }}>
-            {locationError ? "Cincinnati, OH" : `Within ${radius} miles of you`}
+            {locationError ? "Cincinnati, OH" : isSearching ? "Global search" : `Within ${radius} miles of you`}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -175,126 +356,200 @@ export default function Home() {
         </div>
       </div>
 
-      {googlePlaceItems.length > 0 && (
-        <div style={{ position: "relative" }}>
-          <img
-            src={buildStaticMapUrl()}
-            alt="Nearby map"
-            style={{ width: "100%", display: "block", height: "220px", objectFit: "cover" }}
+      {/* Filter tabs */}
+      <div style={{ background: "#534AB7", padding: "10px 0 0" }}>
+        <div style={{ display: "flex", gap: "8px", overflowX: "auto", padding: "0 1.25rem 10px", scrollbarWidth: "none" }}>
+          <style>{`div::-webkit-scrollbar { display: none; }`}</style>
+          {FILTERS.map(f => (
+            <button
+              key={f.key}
+              onClick={() => { setActiveFilter(f.key); setSearch(""); setSearchResults([]) }}
+              style={{
+                flexShrink: 0,
+                padding: "6px 16px",
+                borderRadius: "20px",
+                fontSize: "13px",
+                fontWeight: "600",
+                cursor: "pointer",
+                border: "none",
+                background: activeFilter === f.key && !isSearching ? "white" : "rgba(255,255,255,0.15)",
+                color: activeFilter === f.key && !isSearching ? "#534AB7" : "white",
+                transition: "background 0.15s",
+              }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Search bar */}
+        <div style={{ padding: "0 1.25rem 12px", position: "relative" }}>
+          <div style={{ position: "absolute", left: "1.75rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.6)", fontSize: "14px", pointerEvents: "none" }}>🔍</div>
+          <input
+            type="text"
+            value={search}
+            onChange={e => handleSearch(e.target.value)}
+            placeholder="Search any place worldwide..."
+            style={{ width: "100%", padding: "10px 16px 10px 36px", borderRadius: "12px", border: "none", fontSize: "14px", background: "rgba(255,255,255,0.15)", color: "white", boxSizing: "border-box", outline: "none" }}
           />
-          <div style={{ position: "absolute", bottom: "10px", right: "10px", display: "flex", flexDirection: "column", gap: "6px" }}>
-            <div onClick={() => setRadius(r => Math.max(1, r - 1))} style={{ width: "32px", height: "32px", background: "white", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "18px", boxShadow: "0 2px 6px rgba(0,0,0,0.2)", fontWeight: "700" }}>+</div>
-            <div onClick={() => setRadius(r => Math.min(10, r + 1))} style={{ width: "32px", height: "32px", background: "white", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "18px", boxShadow: "0 2px 6px rgba(0,0,0,0.2)", fontWeight: "700" }}>−</div>
-          </div>
-          <div style={{ position: "absolute", bottom: "10px", left: "10px", background: "white", fontSize: "11px", fontWeight: "600", color: "#534AB7", padding: "4px 10px", borderRadius: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }}>
-            {googlePlaceItems.length} spots within {radius} mi
+          <style>{`input::placeholder { color: rgba(255,255,255,0.55); }`}</style>
+          {searching && (
+            <div style={{ position: "absolute", right: "1.75rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.7)", fontSize: "11px" }}>Searching...</div>
+          )}
+          {isSearching && !searching && (
+            <div onClick={() => { setSearch(""); setSearchResults([]) }} style={{ position: "absolute", right: "1.75rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.7)", fontSize: "16px", cursor: "pointer" }}>✕</div>
+          )}
+        </div>
+      </div>
+
+      {/* Map */}
+      {location && mapPlaces.length > 0 && (
+        <div style={{ position: "relative" }}>
+          <FeedMap
+            userLocation={location}
+            places={mapPlaces}
+            onPinSelect={setSelectedPin}
+          />
+          <div style={{ position: "absolute", bottom: "10px", left: "10px", background: "white", fontSize: "11px", fontWeight: "600", color: "#534AB7", padding: "4px 10px", borderRadius: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.15)", zIndex: 400 }}>
+            {isSearching ? `${searchResults.length} results` : `${allGooglePlaces.length} spots within ${radius} mi`}
           </div>
         </div>
       )}
 
+      {/* Feed */}
       <div>
-        {feedItems.length === 0 && (
-          <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
-            <div style={{ fontSize: "32px", marginBottom: "8px" }}>📍</div>
-            <div style={{ fontSize: "14px", color: "#888", marginBottom: "12px" }}>Nothing within {radius} miles yet</div>
-            <div onClick={() => setRadius(r => r === 3 ? 5 : 10)} style={{ fontSize: "13px", color: "#534AB7", fontWeight: "600", cursor: "pointer" }}>
-              {radius < 10 ? `Expand to ${radius === 3 ? 5 : 10} miles →` : "More coming soon"}
-            </div>
-          </div>
-        )}
-
-        {feedItems.map((item, index) => {
-
-          if (item.type === "special") {
-            const biz = item.biz
-            return (
-              <Link key={`special-${biz.id}`} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "block" }}>
-                <div style={{ position: "relative", height: "200px" }}>
-                  <img src={biz.special_media_url || biz.cover_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.7) 100%)" }} />
-                  <div style={{ position: "absolute", top: "14px", left: "14px", background: "#534AB7", color: "white", fontSize: "10px", fontWeight: "700", padding: "4px 12px", borderRadius: "20px" }}>✦ SPECIAL TODAY</div>
-                  <div style={{ position: "absolute", bottom: "16px", left: "16px", right: "16px" }}>
-                    <div style={{ fontSize: "18px", fontWeight: "700", color: "white", marginBottom: "4px" }}>{biz.name}</div>
-                    <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.9)" }}>{biz.special_today}</div>
-                  </div>
-                </div>
-                <div style={{ height: "1px", background: "#eee" }} />
-              </Link>
-            )
-          }
-
-          if (item.type === "review") {
-            const review = item.review
-            return (
-              <div key={`review-${review.id}`} style={{ padding: "16px 1.25rem", borderBottom: "1px solid #eee" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: "#534AB7", flexShrink: 0 }}>
-                    {review.reviewer_initials || "R"}
+        {/* Search results */}
+        {isSearching && (
+          <>
+            {searchResults.length === 0 && !searching && (
+              <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
+                <div style={{ fontSize: "32px", marginBottom: "8px" }}>🔍</div>
+                <div style={{ fontSize: "14px", color: "#888" }}>No results for "{search}"</div>
+              </div>
+            )}
+            {searchResults.map(place => {
+              const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
+              const category = getCategoryFromTypes(place.types || [])
+              const isOpen = place.currentOpeningHours?.openNow
+              const dist = place.distance
+              return (
+                <Link key={`search-${place.id}`} href={`/search/${place.id}`} style={{ textDecoration: "none", display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee" }}>
+                  <div style={{ width: "60px", height: "60px", borderRadius: "14px", overflow: "hidden", flexShrink: 0 }}>
+                    <img src={photo} alt={place.displayName?.text} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "13px", fontWeight: "600", color: "#111" }}>{review.reviewer_name}</div>
-                    <div style={{ fontSize: "11px", color: "#888" }}>
-                      reviewed <Link href={`/business/${review.business_id}`} style={{ color: "#534AB7", textDecoration: "none", fontWeight: "600" }}>{review.businesses?.name}</Link> · {new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px" }}>{place.displayName?.text}</div>
+                    <div style={{ fontSize: "12px", color: "#888", marginBottom: "3px" }}>{place.formattedAddress}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      {place.rating && <span style={{ fontSize: "11px", color: "#534AB7", fontWeight: "600" }}>✦ {place.rating}</span>}
+                      {isOpen !== undefined && <span style={{ fontSize: "10px", color: isOpen ? "#3B6D11" : "#A32D2D", fontWeight: "600" }}>{isOpen ? "Open" : "Closed"}</span>}
+                      {dist < 999 && <span style={{ fontSize: "10px", color: "#888" }}>{dist < 0.1 ? "Right here" : `${dist.toFixed(1)} mi`}</span>}
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: "1px" }}>
-                    {[1,2,3,4,5].map(s => (
-                      <span key={s} style={{ fontSize: "11px", color: s <= review.stars ? "#534AB7" : "#ddd" }}>✦</span>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ fontSize: "14px", color: "#333", lineHeight: "1.6", marginBottom: review.media_urls?.length > 0 ? "12px" : "0" }}>
-                  {review.text?.slice(0, 200)}{review.text?.length > 200 ? "..." : ""}
-                </div>
-                {review.media_urls?.length > 0 && (
-                  <div style={{ display: "flex", gap: "6px", overflowX: "auto", marginLeft: "-1.25rem", paddingLeft: "1.25rem", paddingRight: "1.25rem", paddingBottom: "4px" }}>
-                    {review.media_urls.map((url: string, i: number) => (
-                      <img key={i} src={url} alt="Review photo" onClick={() => setSelectedPhoto(url)} style={{ width: "120px", height: "120px", objectFit: "cover", borderRadius: "12px", flexShrink: 0, cursor: "pointer" }} />
-                    ))}
-                  </div>
-                )}
+                  <span style={{ color: "#ddd", fontSize: "18px" }}>›</span>
+                </Link>
+              )
+            })}
+          </>
+        )}
+
+        {/* Normal feed */}
+        {!isSearching && (
+          <>
+            {feedItems.length === 0 && (
+              <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
+                <div style={{ fontSize: "32px", marginBottom: "8px" }}>📍</div>
+                <div style={{ fontSize: "14px", color: "#888" }}>Nothing within {radius} miles yet</div>
               </div>
-            )
-          }
+            )}
 
-          if (item.type === "google_place") {
-            const place = item.place
-            const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
-            const category = getCategoryFromTypes(place.types || [])
-            const isOpen = place.currentOpeningHours?.openNow
-            const dist = item.distance
+            {feedItems.map((item) => {
+              if (item.type === "special") {
+                const biz = item.biz
+                return (
+                  <Link key={`special-${biz.id}`} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "block" }}>
+                    <div style={{ position: "relative", height: "200px" }}>
+                      <img src={biz.special_media_url || biz.cover_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.7) 100%)" }} />
+                      <div style={{ position: "absolute", top: "14px", left: "14px", background: "#534AB7", color: "white", fontSize: "10px", fontWeight: "700", padding: "4px 12px", borderRadius: "20px" }}>✦ SPECIAL TODAY</div>
+                      <div style={{ position: "absolute", bottom: "16px", left: "16px", right: "16px" }}>
+                        <div style={{ fontSize: "18px", fontWeight: "700", color: "white", marginBottom: "4px" }}>{biz.name}</div>
+                        <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.9)" }}>{biz.special_today}</div>
+                      </div>
+                    </div>
+                    <div style={{ height: "1px", background: "#eee" }} />
+                  </Link>
+                )
+              }
 
-            return (
-              <Link key={`place-${place.id}`} href={`/search/${place.id}`} style={{ textDecoration: "none", display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee" }}>
-                <div style={{ width: "60px", height: "60px", borderRadius: "14px", overflow: "hidden", flexShrink: 0 }}>
-                  <img src={photo} alt={place.displayName?.text} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px" }}>{place.displayName?.text}</div>
-                  <div style={{ fontSize: "12px", color: "#888", marginBottom: "5px" }}>{category}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    {isOpen !== undefined && (
-                      <span style={{ fontSize: "10px", color: isOpen ? "#3B6D11" : "#A32D2D", fontWeight: "600" }}>
-                        {isOpen ? "Open" : "Closed"}
-                      </span>
-                    )}
-                    {dist < 999 && (
-                      <span style={{ fontSize: "10px", color: "#888" }}>{dist < 0.1 ? "Right here" : `${dist.toFixed(1)} mi away`}</span>
+              if (item.type === "review") {
+                const review = item.review
+                return (
+                  <div key={`review-${review.id}`} style={{ padding: "16px 1.25rem", borderBottom: "1px solid #eee" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: "#534AB7", flexShrink: 0 }}>
+                        {review.reviewer_initials || "R"}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: "13px", fontWeight: "600", color: "#111" }}>{review.reviewer_name}</div>
+                        <div style={{ fontSize: "11px", color: "#888" }}>
+                          reviewed <Link href={`/business/${review.business_id}`} style={{ color: "#534AB7", textDecoration: "none", fontWeight: "600" }}>{review.businesses?.name}</Link> · {new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: "1px" }}>
+                        {[1, 2, 3, 4, 5].map(s => (
+                          <span key={s} style={{ fontSize: "11px", color: s <= review.stars ? "#534AB7" : "#ddd" }}>✦</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#333", lineHeight: "1.6", marginBottom: review.media_urls?.length > 0 ? "12px" : "0" }}>
+                      {review.text?.slice(0, 200)}{review.text?.length > 200 ? "..." : ""}
+                    </div>
+                    {review.media_urls?.length > 0 && (
+                      <div style={{ display: "flex", gap: "6px", overflowX: "auto", marginLeft: "-1.25rem", paddingLeft: "1.25rem", paddingRight: "1.25rem", paddingBottom: "4px" }}>
+                        {review.media_urls.map((url: string, i: number) => (
+                          <img key={i} src={url} alt="Review photo" onClick={() => setSelectedPhoto(url)} style={{ width: "120px", height: "120px", objectFit: "cover", borderRadius: "12px", flexShrink: 0, cursor: "pointer" }} />
+                        ))}
+                      </div>
                     )}
                   </div>
-                </div>
-                <span style={{ color: "#ddd", fontSize: "18px" }}>›</span>
-              </Link>
-            )
-          }
+                )
+              }
 
-          return null
-        })}
+              if (item.type === "google_place") {
+                const place = item.place
+                const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
+                const category = getCategoryFromTypes(place.types || [])
+                const isOpen = place.currentOpeningHours?.openNow
+                const dist = item.distance
+                return (
+                  <Link key={`place-${place.id}`} href={`/search/${place.id}`} style={{ textDecoration: "none", display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee" }}>
+                    <div style={{ width: "60px", height: "60px", borderRadius: "14px", overflow: "hidden", flexShrink: 0 }}>
+                      <img src={photo} alt={place.displayName?.text} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px" }}>{place.displayName?.text}</div>
+                      <div style={{ fontSize: "12px", color: "#888", marginBottom: "5px" }}>{category}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        {isOpen !== undefined && <span style={{ fontSize: "10px", color: isOpen ? "#3B6D11" : "#A32D2D", fontWeight: "600" }}>{isOpen ? "Open" : "Closed"}</span>}
+                        {dist < 999 && <span style={{ fontSize: "10px", color: "#888" }}>{dist < 0.1 ? "Right here" : `${dist.toFixed(1)} mi away`}</span>}
+                      </div>
+                    </div>
+                    <span style={{ color: "#ddd", fontSize: "18px" }}>›</span>
+                  </Link>
+                )
+              }
 
-        {feedItems.length > 0 && radius < 10 && (
-          <div onClick={() => setRadius(r => r === 3 ? 5 : 10)} style={{ textAlign: "center", padding: "20px", fontSize: "13px", color: "#534AB7", fontWeight: "600", cursor: "pointer" }}>
-            Show more within {radius === 3 ? 5 : 10} miles →
-          </div>
+              return null
+            })}
+
+            <div ref={sentinelRef} style={{ padding: "16px", textAlign: "center" }}>
+              {loadingMore && <div style={{ fontSize: "13px", color: "#888" }}>Loading more...</div>}
+              {!loadingMore && !hasMore && feedItems.length > 0 && (
+                <div style={{ fontSize: "13px", color: "#bbb" }}>You've seen everything within {radius} miles</div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>
