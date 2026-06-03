@@ -119,9 +119,7 @@ const FILTERS = [
   { key: "all", label: "All", types: [] },
 ]
 
-const INITIAL_RADIUS_MI = 3
-const RADIUS_INCREMENT_MI = 2
-const MAX_RADIUS_MI = 50
+const MAX_RADIUS = 30
 
 function PlaceCard({ place, index }: { place: any; index: number }) {
   const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
@@ -159,31 +157,17 @@ export default function Home() {
   const [search, setSearch] = useState("")
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
-  const [allGooglePlaces, setAllGooglePlaces] = useState<any[]>([])
+  const [places, setPlaces] = useState<any[]>([])
   const [reviews, setReviews] = useState<any[]>([])
   const [specials, setSpecials] = useState<any[]>([])
-  const [radius, setRadius] = useState(INITIAL_RADIUS_MI)
+  const [radius, setRadius] = useState(3)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
   const [selectedPin, setSelectedPin] = useState<any | null>(null)
 
   const seenIdsRef = useRef(new Set<string>())
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  const loadingMoreRef = useRef(false)
-  const hasMoreRef = useRef(true)
-  const radiusRef = useRef(INITIAL_RADIUS_MI)
-  const activeFilterRef = useRef("food")
-  const locationRef = useRef<{ lat: number; lng: number } | null>(null)
-  const searchRef = useRef("")
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => { hasMoreRef.current = hasMore }, [hasMore])
-  useEffect(() => { radiusRef.current = radius }, [radius])
-  useEffect(() => { activeFilterRef.current = activeFilter }, [activeFilter])
-  useEffect(() => { locationRef.current = location }, [location])
-  useEffect(() => { searchRef.current = search }, [search])
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -195,37 +179,7 @@ export default function Home() {
   useEffect(() => {
     if (!location) return
     initialLoad(location, activeFilter)
-  }, [location, activeFilter])
-
-  // Create observer after loading=false so sentinel is in the DOM
-  useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (!sentinel) return
-    const observer = new IntersectionObserver(
-      entries => {
-        if (!entries[0].isIntersecting) return
-        if (loadingMoreRef.current || !hasMoreRef.current || !locationRef.current || searchRef.current.trim()) return
-        loadMore()
-      },
-      { rootMargin: "200px", threshold: 0 }
-    )
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // After each loadMore completes, re-check if sentinel is still visible.
-  // IntersectionObserver only fires on state *change*, so if content is sparse
-  // and the sentinel never leaves the viewport, the observer won't re-trigger.
-  useEffect(() => {
-    if (loadingMore) return
-    if (!hasMoreRef.current || !locationRef.current || searchRef.current.trim()) return
-    const sentinel = sentinelRef.current
-    if (!sentinel) return
-    const rect = sentinel.getBoundingClientRect()
-    if (rect.top <= window.innerHeight + 300) {
-      loadMore()
-    }
-  }, [loadingMore]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [location, activeFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function getFilterTypes(filterKey: string) {
     return FILTERS.find(f => f.key === filterKey)?.types ?? []
@@ -233,81 +187,57 @@ export default function Home() {
 
   async function initialLoad(loc: { lat: number; lng: number }, filterKey: string) {
     setLoading(true)
-    setLoadingMore(false)
-    loadingMoreRef.current = false
     seenIdsRef.current = new Set()
-    setAllGooglePlaces([])
-    setRadius(INITIAL_RADIUS_MI)
-    radiusRef.current = INITIAL_RADIUS_MI
-    setHasMore(true)
-    hasMoreRef.current = true
+    setPlaces([])
+    setRadius(3)
 
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-    const radiusMeters = INITIAL_RADIUS_MI * 1609
     const types = getFilterTypes(filterKey)
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
 
     const [placesRes, reviewRes, specialsRes] = await Promise.all([
-      fetch(`/api/places?lat=${loc.lat}&lng=${loc.lng}&radius=${radiusMeters}${typesParam}`),
+      fetch(`/api/places?lat=${loc.lat}&lng=${loc.lng}&radius=${3 * 1609}${typesParam}`),
       supabase.from("reviews").select("*, businesses(name, category, cover_url, latitude, longitude)").eq("status", "published").order("created_at", { ascending: false }).limit(30),
       supabase.from("businesses").select("*").not("special_today", "is", null),
     ])
 
     const placesData = await placesRes.json()
-    const places = (placesData.places || [])
+    const loaded = (placesData.places || [])
       .map((p: any) => ({ ...p, distance: p.location ? getDistance(loc.lat, loc.lng, p.location.latitude, p.location.longitude) : 999 }))
       .sort((a: any, b: any) => a.distance - b.distance)
 
-    places.forEach((p: any) => seenIdsRef.current.add(p.id))
-    setAllGooglePlaces(places)
+    loaded.forEach((p: any) => seenIdsRef.current.add(p.id))
+    setPlaces(loaded)
     setReviews(reviewRes.data || [])
     setSpecials(specialsRes.data || [])
-
-    setHasMore(true)
-    hasMoreRef.current = true
     setLoading(false)
   }
 
   async function loadMore() {
-    if (loadingMoreRef.current || !hasMoreRef.current || !locationRef.current || searchRef.current.trim()) return
-    const nextRadius = radiusRef.current + RADIUS_INCREMENT_MI
-    if (nextRadius > MAX_RADIUS_MI) {
-      setHasMore(false)
-      hasMoreRef.current = false
-      return
-    }
-
-    loadingMoreRef.current = true
+    if (!location || loadingMore) return
+    const nextRadius = radius + 3
     setLoadingMore(true)
 
-    const types = getFilterTypes(activeFilterRef.current)
+    const types = getFilterTypes(activeFilter)
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
-    const loc = locationRef.current!
 
     try {
-      const res = await fetch(`/api/places?lat=${loc.lat}&lng=${loc.lng}&radius=${nextRadius * 1609}${typesParam}`)
+      const res = await fetch(`/api/places?lat=${location.lat}&lng=${location.lng}&radius=${nextRadius * 1609}${typesParam}`)
       const data = await res.json()
       const newPlaces = (data.places || [])
         .filter((p: any) => !seenIdsRef.current.has(p.id))
-        .map((p: any) => ({ ...p, distance: p.location ? getDistance(loc.lat, loc.lng, p.location.latitude, p.location.longitude) : 999 }))
+        .map((p: any) => ({ ...p, distance: p.location ? getDistance(location.lat, location.lng, p.location.latitude, p.location.longitude) : 999 }))
         .sort((a: any, b: any) => a.distance - b.distance)
-
       newPlaces.forEach((p: any) => seenIdsRef.current.add(p.id))
-      setAllGooglePlaces(prev => [...prev, ...newPlaces])
+      setPlaces(prev => [...prev, ...newPlaces])
     } catch { /* silent */ }
 
     setRadius(nextRadius)
-    radiusRef.current = nextRadius
-    const more = nextRadius + RADIUS_INCREMENT_MI <= MAX_RADIUS_MI
-    setHasMore(more)
-    hasMoreRef.current = more
-    loadingMoreRef.current = false
     setLoadingMore(false)
   }
 
   function handleSearch(text: string) {
     setSearch(text)
-    searchRef.current = text
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
     if (!text.trim()) { setSearchResults([]); setSearching(false); return }
     setSearching(true)
@@ -316,13 +246,12 @@ export default function Home() {
         const res = await fetch("/api/places", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: text, lat: locationRef.current?.lat, lng: locationRef.current?.lng }),
+          body: JSON.stringify({ query: text, lat: location?.lat, lng: location?.lng }),
         })
         const data = await res.json()
-        const loc = locationRef.current
         setSearchResults((data.places || []).map((p: any) => ({
           ...p,
-          distance: p.location && loc ? getDistance(loc.lat, loc.lng, p.location.latitude, p.location.longitude) : 999,
+          distance: p.location && location ? getDistance(location.lat, location.lng, p.location.latitude, p.location.longitude) : 999,
         })))
       } catch { setSearchResults([]) }
       setSearching(false)
@@ -330,7 +259,7 @@ export default function Home() {
   }
 
   const isSearching = search.trim().length > 0
-  const mapPlaces = isSearching ? searchResults : allGooglePlaces
+  const mapPlaces = isSearching ? searchResults : places
 
   const feedItems: any[] = []
   if (!isSearching && location) {
@@ -344,7 +273,7 @@ export default function Home() {
       }
       feedItems.push({ type: "review", review, distance: dist })
     })
-    allGooglePlaces.forEach((place: any) => feedItems.push({ type: "google_place", place, distance: place.distance }))
+    places.forEach((place: any) => feedItems.push({ type: "google_place", place, distance: place.distance }))
     feedItems.sort((a, b) => {
       if (a.type === "special" && b.type !== "special") return -1
       if (b.type === "special" && a.type !== "special") return 1
@@ -426,7 +355,7 @@ export default function Home() {
             style={{ width: "100%", padding: "10px 40px 10px 36px", borderRadius: "12px", border: "none", fontSize: "14px", background: "rgba(255,255,255,0.15)", color: "white", boxSizing: "border-box", outline: "none" }} />
           {searching && <span style={{ position: "absolute", right: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>Searching…</span>}
           {isSearching && !searching && (
-            <span onClick={() => { setSearch(""); searchRef.current = ""; setSearchResults([]) }}
+            <span onClick={() => { setSearch(""); setSearchResults([]) }}
               style={{ position: "absolute", right: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "18px", color: "rgba(255,255,255,0.6)", cursor: "pointer", lineHeight: 1 }}>✕</span>
           )}
         </div>
@@ -437,14 +366,13 @@ export default function Home() {
         <div style={{ position: "relative" }}>
           <FeedMap userLocation={location} places={mapPlaces} onPinSelect={setSelectedPin} />
           <div style={{ position: "absolute", bottom: "10px", left: "10px", background: "white", fontSize: "11px", fontWeight: "600", color: "#534AB7", padding: "4px 10px", borderRadius: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.12)", zIndex: 400 }}>
-            {isSearching ? `${searchResults.length} results` : `${allGooglePlaces.length} spots · ${radius} mi`}
+            {isSearching ? `${searchResults.length} results` : `${places.length} spots · ${radius} mi`}
           </div>
         </div>
       )}
 
-      {/* Feed content */}
+      {/* Feed */}
       <div>
-
         {/* Search mode */}
         {isSearching && !searching && searchResults.length === 0 && (
           <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
@@ -523,14 +451,21 @@ export default function Home() {
           return null
         })}
 
-        {/* Sentinel — always rendered so observer never needs to reconnect */}
-        <div ref={sentinelRef} style={{ height: "1px" }} />
-        {loadingMore && (
-          <div style={{ padding: "20px", textAlign: "center", fontSize: "13px", color: "#aaa" }}>Loading more…</div>
-        )}
-        {!loadingMore && !hasMore && (allGooglePlaces.length > 0 || isSearching) && (
-          <div style={{ padding: "24px", textAlign: "center", fontSize: "13px", color: "#ccc" }}>
-            {isSearching ? "End of search results" : `All spots within ${radius} miles shown`}
+        {/* Load more / end of results */}
+        {!isSearching && (
+          <div style={{ padding: "20px 1.25rem", textAlign: "center" }}>
+            {loadingMore ? (
+              <div style={{ fontSize: "13px", color: "#aaa" }}>Loading…</div>
+            ) : radius >= MAX_RADIUS ? (
+              <div style={{ fontSize: "13px", color: "#ccc" }}>All spots within {MAX_RADIUS} miles shown</div>
+            ) : (
+              <button
+                onClick={loadMore}
+                style={{ background: "white", border: "1.5px solid #534AB7", color: "#534AB7", fontSize: "13px", fontWeight: "600", padding: "10px 24px", borderRadius: "20px", cursor: "pointer" }}
+              >
+                Load more · expand to {radius + 3} mi
+              </button>
+            )}
           </div>
         )}
       </div>
