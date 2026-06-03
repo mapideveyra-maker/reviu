@@ -1,7 +1,7 @@
 "use client"
 import Link from "next/link"
 import dynamic from "next/dynamic"
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createClient } from "@supabase/supabase-js"
 
 const FeedMap = dynamic(() => import("./FeedMap"), { ssr: false })
@@ -119,7 +119,9 @@ const FILTERS = [
   { key: "all", label: "All", types: [] },
 ]
 
-const RADIUS_STEPS = [3, 5, 10]
+const INITIAL_RADIUS_MI = 3
+const RADIUS_INCREMENT_MI = 2
+const MAX_RADIUS_MI = 50
 
 function PlaceCard({ place, index }: { place: any; index: number }) {
   const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
@@ -135,9 +137,6 @@ function PlaceCard({ place, index }: { place: any; index: number }) {
         <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{place.displayName?.text}</div>
         <div style={{ fontSize: "12px", color: "#888", marginBottom: "5px" }}>{category}</div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-          {place.rating && (
-            <span style={{ fontSize: "11px", color: "#534AB7", fontWeight: "700" }}>✦ {place.rating}</span>
-          )}
           {isOpen !== undefined && (
             <span style={{ fontSize: "11px", fontWeight: "600", color: isOpen ? "#3B6D11" : "#A32D2D" }}>
               {isOpen ? "Open" : "Closed"}
@@ -163,7 +162,7 @@ export default function Home() {
   const [allGooglePlaces, setAllGooglePlaces] = useState<any[]>([])
   const [reviews, setReviews] = useState<any[]>([])
   const [specials, setSpecials] = useState<any[]>([])
-  const [radius, setRadius] = useState(RADIUS_STEPS[0])
+  const [radius, setRadius] = useState(INITIAL_RADIUS_MI)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
@@ -174,7 +173,7 @@ export default function Home() {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const loadingMoreRef = useRef(false)
   const hasMoreRef = useRef(true)
-  const radiusRef = useRef(RADIUS_STEPS[0])
+  const radiusRef = useRef(INITIAL_RADIUS_MI)
   const activeFilterRef = useRef("food")
   const locationRef = useRef<{ lat: number; lng: number } | null>(null)
   const searchRef = useRef("")
@@ -238,13 +237,13 @@ export default function Home() {
     loadingMoreRef.current = false
     seenIdsRef.current = new Set()
     setAllGooglePlaces([])
-    setRadius(RADIUS_STEPS[0])
-    radiusRef.current = RADIUS_STEPS[0]
+    setRadius(INITIAL_RADIUS_MI)
+    radiusRef.current = INITIAL_RADIUS_MI
     setHasMore(true)
     hasMoreRef.current = true
 
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-    const radiusMeters = RADIUS_STEPS[0] * 1609
+    const radiusMeters = INITIAL_RADIUS_MI * 1609
     const types = getFilterTypes(filterKey)
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
 
@@ -264,8 +263,6 @@ export default function Home() {
     setReviews(reviewRes.data || [])
     setSpecials(specialsRes.data || [])
 
-    // Always try larger radii after the initial smallest-radius load.
-    // loadMore() terminates when RADIUS_STEPS is exhausted.
     setHasMore(true)
     hasMoreRef.current = true
     setLoading(false)
@@ -273,13 +270,12 @@ export default function Home() {
 
   async function loadMore() {
     if (loadingMoreRef.current || !hasMoreRef.current || !locationRef.current || searchRef.current.trim()) return
-    const currentIndex = RADIUS_STEPS.indexOf(radiusRef.current)
-    if (currentIndex < 0 || currentIndex >= RADIUS_STEPS.length - 1) {
+    const nextRadius = radiusRef.current + RADIUS_INCREMENT_MI
+    if (nextRadius > MAX_RADIUS_MI) {
       setHasMore(false)
       hasMoreRef.current = false
       return
     }
-    const nextRadius = RADIUS_STEPS[currentIndex + 1]
 
     loadingMoreRef.current = true
     setLoadingMore(true)
@@ -302,7 +298,7 @@ export default function Home() {
 
     setRadius(nextRadius)
     radiusRef.current = nextRadius
-    const more = nextRadius < RADIUS_STEPS[RADIUS_STEPS.length - 1]
+    const more = nextRadius + RADIUS_INCREMENT_MI <= MAX_RADIUS_MI
     setHasMore(more)
     hasMoreRef.current = more
     loadingMoreRef.current = false
