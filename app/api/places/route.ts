@@ -93,7 +93,9 @@ export async function GET(request: Request) {
       batches = [await nearbySearch(lat, lng, radius, includedTypes, apiKey)]
     }
 
-    const places = qualityFilter(dedup(batches))
+    const deduped = dedup(batches)
+    const places = qualityFilter(deduped)
+    console.log(`[places GET] types=${JSON.stringify(includedTypes)} radius=${radius}m raw=${deduped.length} after_filter=${places.length}`)
     return NextResponse.json({ places })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
