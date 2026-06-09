@@ -2,7 +2,6 @@
 import Link from "next/link"
 import { useState, useEffect, useRef } from "react"
 import { createClient } from "@supabase/supabase-js"
-import FeedMap from "./FeedMap"
 
 function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 3958.8
@@ -192,7 +191,6 @@ export default function Home() {
         body: JSON.stringify({ query: q + " city" }),
       })
       const data = await res.json()
-      console.log("CITY LOOKUP RESULT:", data)
       const first = (data.places || [])[0]
       if (first?.location) {
         setLocationError(false)
@@ -302,18 +300,6 @@ export default function Home() {
     feedItems.sort((a, b) => a.distance - b.distance)
   }
 
-  const mapPoints = feedItems
-    .map((it: any) => {
-      if (it.type === "google_place" && it.place.location) {
-        return { id: it.place.id, name: it.place.displayName?.text || "Place", lat: it.place.location.latitude, lng: it.place.location.longitude, href: `/search/${it.place.id}` }
-      }
-      if (it.type === "review" && it.review.businesses?.latitude && it.review.businesses?.longitude) {
-        return { id: `r-${it.review.id}`, name: it.review.businesses?.name || "Place", lat: parseFloat(it.review.businesses.latitude), lng: parseFloat(it.review.businesses.longitude), href: `/business/${it.review.business_id}` }
-      }
-      return null
-    })
-    .filter(Boolean) as any[]
-
   // Location denied and no city chosen yet — ask for a city
   if (locationError && !location) {
     return (
@@ -403,10 +389,6 @@ export default function Home() {
           )}
         </div>
       </div>
-
-      {!isSearching && mapPoints.length > 0 && (
-        <FeedMap center={location} points={mapPoints} />
-      )}
 
       <div>
         {isSearching && !searching && searchResults.length === 0 && (
