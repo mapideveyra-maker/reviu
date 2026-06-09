@@ -2,6 +2,7 @@
 import Link from "next/link"
 import { useState, useEffect, useRef } from "react"
 import { createClient } from "@supabase/supabase-js"
+import FeedMap from "./FeedMap"
 
 function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 3958.8
@@ -150,13 +151,15 @@ function PlaceCard({ place }: { place: any }) {
 export default function Home() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [locationError, setLocationError] = useState(false)
+  const [cityInput, setCityInput] = useState("")
+  const [lookingUpCity, setLookingUpCity] = useState(false)
+  const [cityError, setCityError] = useState("")
   const [activeFilter, setActiveFilter] = useState("food")
   const [search, setSearch] = useState("")
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
   const [places, setPlaces] = useState<any[]>([])
   const [reviews, setReviews] = useState<any[]>([])
-  const [specials, setSpecials] = useState<any[]>([])
   const [radius, setRadius] = useState(3)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -168,7 +171,7 @@ export default function Home() {
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => { setLocationError(true); setLocation({ lat: 39.1031, lng: -84.5120 }) }
+      () => { setLocationError(true); setLoading(false) }
     )
   }, [])
 
@@ -176,6 +179,33 @@ export default function Home() {
     if (!location) return
     initialLoad(location, activeFilter)
   }, [location, activeFilter])
+
+  async function lookupCity() {
+    const q = cityInput.trim()
+    if (!q) return
+    setLookingUpCity(true)
+    setCityError("")
+    try {
+      const res = await fetch("/api/places", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q + " city" }),
+      })
+      const data = await res.json()
+      console.log("CITY LOOKUP RESULT:", data)
+      const first = (data.places || [])[0]
+      if (first?.location) {
+        setLocationError(false)
+        setLoading(true)
+        setLocation({ lat: first.location.latitude, lng: first.location.longitude })
+      } else {
+        setCityError("Couldn't find that place. Try another city name.")
+      }
+    } catch {
+      setCityError("Something went wrong. Try again.")
+    }
+    setLookingUpCity(false)
+  }
 
   function getFilterTypes(filterKey: string) {
     return FILTERS.find(f => f.key === filterKey)?.types ?? []
@@ -191,10 +221,9 @@ export default function Home() {
     const types = getFilterTypes(filterKey)
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
 
-    const [placesRes, reviewRes, specialsRes] = await Promise.all([
+    const [placesRes, reviewRes] = await Promise.all([
       fetch(`/api/places?lat=${loc.lat}&lng=${loc.lng}&radius=${3 * 1609}${typesParam}`),
       supabase.from("reviews").select("*, businesses(name, category, cover_url, latitude, longitude)").eq("status", "published").order("created_at", { ascending: false }).limit(30),
-      supabase.from("businesses").select("*").not("special_today", "is", null),
     ])
 
     const placesData = await placesRes.json()
@@ -205,7 +234,6 @@ export default function Home() {
     loaded.forEach((p: any) => seenIdsRef.current.add(p.id))
     setPlaces(loaded)
     setReviews(reviewRes.data || [])
-    setSpecials(specialsRes.data || [])
     setLoading(false)
   }
 
@@ -261,7 +289,6 @@ export default function Home() {
 
   const feedItems: any[] = []
   if (!isSearching && location) {
-    specials.forEach((biz: any) => feedItems.push({ type: "special", biz, distance: 0 }))
     reviews.forEach((review: any) => {
       const biz = review.businesses
       let dist = 999
@@ -272,11 +299,48 @@ export default function Home() {
       feedItems.push({ type: "review", review, distance: dist })
     })
     places.forEach((place: any) => feedItems.push({ type: "google_place", place, distance: place.distance }))
-    feedItems.sort((a, b) => {
-      if (a.type === "special" && b.type !== "special") return -1
-      if (b.type === "special" && a.type !== "special") return 1
-      return a.distance - b.distance
+    feedItems.sort((a, b) => a.distance - b.distance)
+  }
+
+  const mapPoints = feedItems
+    .map((it: any) => {
+      if (it.type === "google_place" && it.place.location) {
+        return { id: it.place.id, name: it.place.displayName?.text || "Place", lat: it.place.location.latitude, lng: it.place.location.longitude, href: `/search/${it.place.id}` }
+      }
+      if (it.type === "review" && it.review.businesses?.latitude && it.review.businesses?.longitude) {
+        return { id: `r-${it.review.id}`, name: it.review.businesses?.name || "Place", lat: parseFloat(it.review.businesses.latitude), lng: parseFloat(it.review.businesses.longitude), href: `/business/${it.review.business_id}` }
+      }
+      return null
     })
+    .filter(Boolean) as any[]
+
+  // Location denied and no city chosen yet — ask for a city
+  if (locationError && !location) {
+    return (
+      <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
+        <div style={{ fontSize: "40px", marginBottom: "16px" }}>📍</div>
+        <div style={{ fontSize: "20px", fontWeight: "700", color: "#111", marginBottom: "8px", textAlign: "center" }}>Where are you?</div>
+        <div style={{ fontSize: "14px", color: "#888", marginBottom: "24px", textAlign: "center", lineHeight: "1.5" }}>
+          Enter your city so we can show you what's nearby.
+        </div>
+        <input
+          type="text"
+          value={cityInput}
+          onChange={e => setCityInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") lookupCity() }}
+          placeholder="e.g. London, Los Angeles, Tokyo"
+          style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "15px", background: "white", boxSizing: "border-box", marginBottom: "12px", outline: "none" }}
+        />
+        {cityError && <div style={{ fontSize: "13px", color: "#A32D2D", marginBottom: "12px" }}>{cityError}</div>}
+        <button
+          onClick={lookupCity}
+          disabled={lookingUpCity || !cityInput.trim()}
+          style={{ width: "100%", background: cityInput.trim() ? "#534AB7" : "#bbb", color: "white", padding: "14px", borderRadius: "12px", fontSize: "15px", fontWeight: "600", border: "none", cursor: cityInput.trim() ? "pointer" : "not-allowed" }}
+        >
+          {lookingUpCity ? "Finding..." : "Show me places"}
+        </button>
+      </div>
+    )
   }
 
   if (loading) return (
@@ -303,7 +367,7 @@ export default function Home() {
           <div>
             <div style={{ fontSize: "22px", fontWeight: "700", color: "white", letterSpacing: "-0.5px" }}>Reviu</div>
             <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)", marginTop: "1px" }}>
-              {isSearching ? "Global search" : locationError ? "Cincinnati, OH" : `Within ${radius} mi of you`}
+              {isSearching ? "Global search" : `Within ${radius} mi`}
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -340,6 +404,10 @@ export default function Home() {
         </div>
       </div>
 
+      {!isSearching && mapPoints.length > 0 && (
+        <FeedMap center={location} points={mapPoints} />
+      )}
+
       <div>
         {isSearching && !searching && searchResults.length === 0 && (
           <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
@@ -357,24 +425,6 @@ export default function Home() {
         )}
 
         {!isSearching && feedItems.map((item) => {
-          if (item.type === "special") {
-            const biz = item.biz
-            return (
-              <Link key={`special-${biz.id}`} href={`/business/${biz.id}`} style={{ textDecoration: "none", display: "block" }}>
-                <div style={{ position: "relative", height: "200px" }}>
-                  <img src={biz.special_media_url || biz.cover_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.65) 100%)" }} />
-                  <div style={{ position: "absolute", top: "14px", left: "14px", background: "#534AB7", color: "white", fontSize: "10px", fontWeight: "700", padding: "4px 12px", borderRadius: "20px" }}>✦ SPECIAL TODAY</div>
-                  <div style={{ position: "absolute", bottom: "16px", left: "16px", right: "16px" }}>
-                    <div style={{ fontSize: "18px", fontWeight: "700", color: "white", marginBottom: "4px" }}>{biz.name}</div>
-                    <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)" }}>{biz.special_today}</div>
-                  </div>
-                </div>
-                <div style={{ height: "1px", background: "#eee" }} />
-              </Link>
-            )
-          }
-
           if (item.type === "review") {
             const review = item.review
             return (

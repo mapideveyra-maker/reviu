@@ -1,104 +1,91 @@
 "use client"
-import { useEffect, useRef } from "react"
-import L from "leaflet"
-import "leaflet/dist/leaflet.css"
+import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 
-export default function FeedMap({
-  userLocation,
-  places,
-  onPinSelect,
-}: {
-  userLocation: { lat: number; lng: number }
-  places: any[]
-  onPinSelect: (place: any) => void
-}) {
+type Point = { id: string; name: string; lat: number; lng: number; href: string }
+
+export default function FeedMap({ center, points }: { center: { lat: number; lng: number } | null; points: Point[] }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<L.Map | null>(null)
-  const markersRef = useRef<L.Marker[]>([])
+  const mapRef = useRef<any>(null)
+  const layerRef = useRef<any>(null)
+  const [ready, setReady] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return
+    let cancelled = false
 
-    const map = L.map(containerRef.current, {
-      center: [userLocation.lat, userLocation.lng],
-      zoom: 14,
-      zoomControl: true,
-      attributionControl: false,
-    })
-
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      subdomains: "abcd",
-      maxZoom: 19,
-    }).addTo(map)
-
-    L.marker([userLocation.lat, userLocation.lng], {
-      icon: L.divIcon({
-        className: "reviu-pin-user",
-        html: "<div></div>",
-        iconSize: [16, 16],
-        iconAnchor: [8, 8],
-      }),
-      zIndexOffset: 1000,
-    }).addTo(map)
-
-    mapRef.current = map
-
-    return () => {
-      map.remove()
-      mapRef.current = null
-      markersRef.current = []
+    if (!document.getElementById("leaflet-css")) {
+      const link = document.createElement("link")
+      link.id = "leaflet-css"
+      link.rel = "stylesheet"
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      document.head.appendChild(link)
     }
+
+    function loadJs(): Promise<void> {
+      return new Promise((resolve, reject) => {
+        if ((window as any).L) return resolve()
+        const existing = document.getElementById("leaflet-js")
+        if (existing) {
+          existing.addEventListener("load", () => resolve())
+          existing.addEventListener("error", () => reject())
+          return
+        }
+        const s = document.createElement("script")
+        s.id = "leaflet-js"
+        s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        s.onload = () => resolve()
+        s.onerror = () => reject()
+        document.head.appendChild(s)
+      })
+    }
+
+    loadJs().then(() => {
+      if (cancelled || !containerRef.current) return
+      if (mapRef.current || (containerRef.current as any)._leaflet_id) return
+      const L = (window as any).L
+      const start = center ? [center.lat, center.lng] : [39.1031, -84.5120]
+      const map = L.map(containerRef.current, {
+        center: start, zoom: 13,
+        dragging: false, scrollWheelZoom: false, touchZoom: false,
+        doubleClickZoom: false, boxZoom: false, keyboard: false, zoomControl: false,
+      })
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19, attribution: "&copy; OpenStreetMap",
+      }).addTo(map)
+      layerRef.current = L.layerGroup().addTo(map)
+      mapRef.current = map
+      setReady(true)
+      setTimeout(() => { try { map.invalidateSize() } catch {} }, 150)
+    }).catch(() => {})
+
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
-    if (!mapRef.current) return
+    if (!ready || !mapRef.current || !layerRef.current) return
+    const L = (window as any).L
+    layerRef.current.clearLayers()
 
-    markersRef.current.forEach((m) => m.remove())
-    markersRef.current = []
-
-    places.forEach((place: any) => {
-      const lat = place.location?.latitude
-      const lng = place.location?.longitude
-      if (!lat || !lng) return
-
-      const marker = L.marker([lat, lng], {
-        icon: L.divIcon({
-          className: "reviu-pin-place",
-          html: "<div></div>",
-          iconSize: [12, 12],
-          iconAnchor: [6, 6],
-        }),
-      })
-        .addTo(mapRef.current!)
-        .on("click", () => onPinSelect(place))
-
-      markersRef.current.push(marker)
+    const icon = L.divIcon({
+      className: "",
+      html: `<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;background:#534AB7;border:2px solid white;transform:rotate(-45deg);box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`,
+      iconSize: [18, 18], iconAnchor: [9, 18],
     })
-  }, [places])
 
-  return (
-    <>
-      <style>{`
-        .reviu-pin-user, .reviu-pin-place {
-          background: transparent !important;
-          border: none !important;
-        }
-        .reviu-pin-user div {
-          width: 16px; height: 16px;
-          background: #4285F4;
-          border-radius: 50%;
-          border: 3px solid white;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-        }
-        .reviu-pin-place div {
-          width: 12px; height: 12px;
-          background: #534AB7;
-          border-radius: 50%;
-          border: 2px solid white;
-          box-shadow: 0 1px 6px rgba(83,74,183,0.6);
-        }
-      `}</style>
-      <div ref={containerRef} style={{ width: "100%", height: "220px" }} />
-    </>
-  )
+    const coords: any[] = []
+    points.forEach((p) => {
+      if (typeof p.lat !== "number" || typeof p.lng !== "number" || isNaN(p.lat) || isNaN(p.lng)) return
+      const m = L.marker([p.lat, p.lng], { icon }).addTo(layerRef.current)
+      m.on("click", () => router.push(p.href))
+      m.bindTooltip(p.name, { direction: "top", offset: [0, -16] })
+      coords.push([p.lat, p.lng])
+    })
+    if (center) coords.push([center.lat, center.lng])
+
+    if (coords.length === 1) mapRef.current.setView(coords[0], 14)
+    else if (coords.length > 1) mapRef.current.fitBounds(coords, { padding: [30, 30], maxZoom: 15 })
+  }, [ready, points, center, router])
+
+  return <div ref={containerRef} style={{ height: "180px", width: "100%", background: "#e8e8ef", zIndex: 0 }} />
 }
