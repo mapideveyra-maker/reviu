@@ -1,10 +1,7 @@
 "use client"
 import Link from "next/link"
-import dynamic from "next/dynamic"
 import { useState, useEffect, useRef } from "react"
 import { createClient } from "@supabase/supabase-js"
-
-const FeedMap = dynamic(() => import("./FeedMap"), { ssr: false })
 
 function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 3958.8
@@ -121,7 +118,7 @@ const FILTERS = [
 
 const MAX_RADIUS = 30
 
-function PlaceCard({ place, index }: { place: any; index: number }) {
+function PlaceCard({ place }: { place: any }) {
   const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
   const category = getCategoryFromTypes(place.types || [])
   const isOpen = place.currentOpeningHours?.openNow
@@ -134,7 +131,7 @@ function PlaceCard({ place, index }: { place: any; index: number }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", marginBottom: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{place.displayName?.text}</div>
         <div style={{ fontSize: "12px", color: "#888", marginBottom: "5px" }}>{category}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {isOpen !== undefined && (
             <span style={{ fontSize: "11px", fontWeight: "600", color: isOpen ? "#3B6D11" : "#A32D2D" }}>
               {isOpen ? "Open" : "Closed"}
@@ -164,7 +161,6 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
-  const [selectedPin, setSelectedPin] = useState<any | null>(null)
 
   const seenIdsRef = useRef(new Set<string>())
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -179,7 +175,7 @@ export default function Home() {
   useEffect(() => {
     if (!location) return
     initialLoad(location, activeFilter)
-  }, [location, activeFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [location, activeFilter])
 
   function getFilterTypes(filterKey: string) {
     return FILTERS.find(f => f.key === filterKey)?.types ?? []
@@ -214,18 +210,16 @@ export default function Home() {
   }
 
   async function loadMore() {
-    console.log("loadMore called, radius=" + radius + " loadingMore=" + loadingMore)
     if (!location || loadingMore) return
     const nextRadius = radius + 3
+    if (nextRadius > MAX_RADIUS) return
     setLoadingMore(true)
-
     const types = getFilterTypes(activeFilter)
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
-    const url = `/api/places?lat=${location.lat}&lng=${location.lng}&radius=${nextRadius * 1609}&minRadius=${radius * 1609}${typesParam}`
-
+    const minRadiusMeters = radius * 1609
+    const maxRadiusMeters = nextRadius * 1609
     try {
-      console.log("loadMore fetching:", url)
-      const res = await fetch(url)
+      const res = await fetch(`/api/places?lat=${location.lat}&lng=${location.lng}&radius=${maxRadiusMeters}&minRadius=${minRadiusMeters}${typesParam}`)
       const data = await res.json()
       const newPlaces = (data.places || [])
         .filter((p: any) => !seenIdsRef.current.has(p.id))
@@ -234,8 +228,8 @@ export default function Home() {
       newPlaces.forEach((p: any) => seenIdsRef.current.add(p.id))
       setPlaces(prev => [...prev, ...newPlaces])
       setRadius(nextRadius)
-    } catch (err) {
-      console.error("loadMore fetch failed:", err)
+    } catch (e) {
+      console.error("loadMore error", e)
     } finally {
       setLoadingMore(false)
     }
@@ -264,7 +258,6 @@ export default function Home() {
   }
 
   const isSearching = search.trim().length > 0
-  const mapPlaces = isSearching ? searchResults : places
 
   const feedItems: any[] = []
   if (!isSearching && location) {
@@ -305,19 +298,6 @@ export default function Home() {
         </div>
       )}
 
-      {selectedPin && (
-        <div onClick={() => setSelectedPin(null)} style={{ position: "fixed", inset: 0, zIndex: 500 }}>
-          <div onClick={e => e.stopPropagation()} style={{ position: "absolute", bottom: "90px", left: "50%", transform: "translateX(-50%)", width: "90%", maxWidth: "390px", background: "white", borderRadius: "18px", padding: "18px", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
-            <Link href={`/search/${selectedPin.id}`} style={{ textDecoration: "none" }}>
-              <div style={{ fontSize: "15px", fontWeight: "700", color: "#111", marginBottom: "4px" }}>{selectedPin.displayName?.text}</div>
-              <div style={{ fontSize: "12px", color: "#888", marginBottom: "10px" }}>{getCategoryFromTypes(selectedPin.types || [])} · {selectedPin.distance?.toFixed(1)} mi away</div>
-              <div style={{ background: "#534AB7", color: "white", fontSize: "13px", fontWeight: "600", padding: "8px 16px", borderRadius: "10px", textAlign: "center" }}>View on Reviu →</div>
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* Purple header */}
       <div style={{ background: "#534AB7" }}>
         <div style={{ padding: "1rem 1.25rem 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
@@ -336,12 +316,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Filter tabs */}
         <div style={{ display: "flex", gap: "8px", overflowX: "auto", padding: "12px 1.25rem 0", scrollbarWidth: "none" }}>
-          <style>{`
-            .filter-scroll::-webkit-scrollbar { display: none; }
-            input::placeholder { color: rgba(255,255,255,0.5) !important; }
-          `}</style>
           {FILTERS.map(f => (
             <button key={f.key} onClick={() => { setActiveFilter(f.key); setSearch(""); setSearchResults([]) }}
               style={{ flexShrink: 0, padding: "6px 16px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", cursor: "pointer", border: "none", outline: "none",
@@ -352,7 +327,6 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Search bar */}
         <div style={{ padding: "10px 1.25rem 14px", position: "relative" }}>
           <span style={{ position: "absolute", left: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "14px", pointerEvents: "none", color: "rgba(255,255,255,0.5)" }}>🔍</span>
           <input type="text" value={search} onChange={e => handleSearch(e.target.value)}
@@ -366,28 +340,15 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Map */}
-      {location && mapPlaces.length > 0 && (
-        <div style={{ position: "relative" }}>
-          <FeedMap userLocation={location} places={mapPlaces} onPinSelect={setSelectedPin} />
-          <div style={{ position: "absolute", bottom: "10px", left: "10px", background: "white", fontSize: "11px", fontWeight: "600", color: "#534AB7", padding: "4px 10px", borderRadius: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.12)", zIndex: 400 }}>
-            {isSearching ? `${searchResults.length} results` : `${places.length} spots · ${radius} mi`}
-          </div>
-        </div>
-      )}
-
-      {/* Feed */}
       <div>
-        {/* Search mode */}
         {isSearching && !searching && searchResults.length === 0 && (
           <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
             <div style={{ fontSize: "28px", marginBottom: "8px" }}>🔍</div>
             <div style={{ fontSize: "14px", color: "#888" }}>No results for "{search}"</div>
           </div>
         )}
-        {isSearching && searchResults.map((place, i) => <PlaceCard key={place.id} place={place} index={i} />)}
+        {isSearching && searchResults.map((place) => <PlaceCard key={place.id} place={place} />)}
 
-        {/* Normal mode */}
         {!isSearching && feedItems.length === 0 && (
           <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
             <div style={{ fontSize: "28px", marginBottom: "8px" }}>📍</div>
@@ -403,7 +364,7 @@ export default function Home() {
                 <div style={{ position: "relative", height: "200px" }}>
                   <img src={biz.special_media_url || biz.cover_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"} alt={biz.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.65) 100%)" }} />
-                  <div style={{ position: "absolute", top: "14px", left: "14px", background: "#534AB7", color: "white", fontSize: "10px", fontWeight: "700", padding: "4px 12px", borderRadius: "20px", letterSpacing: "0.5px" }}>✦ SPECIAL TODAY</div>
+                  <div style={{ position: "absolute", top: "14px", left: "14px", background: "#534AB7", color: "white", fontSize: "10px", fontWeight: "700", padding: "4px 12px", borderRadius: "20px" }}>✦ SPECIAL TODAY</div>
                   <div style={{ position: "absolute", bottom: "16px", left: "16px", right: "16px" }}>
                     <div style={{ fontSize: "18px", fontWeight: "700", color: "white", marginBottom: "4px" }}>{biz.name}</div>
                     <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)" }}>{biz.special_today}</div>
@@ -450,13 +411,12 @@ export default function Home() {
           }
 
           if (item.type === "google_place") {
-            return <PlaceCard key={`place-${item.place.id}`} place={item.place} index={0} />
+            return <PlaceCard key={`place-${item.place.id}`} place={item.place} />
           }
 
           return null
         })}
 
-        {/* Load more / end of results */}
         {!isSearching && (
           <div style={{ padding: "20px 1.25rem", textAlign: "center" }}>
             {loadingMore ? (
@@ -464,10 +424,8 @@ export default function Home() {
             ) : radius >= MAX_RADIUS ? (
               <div style={{ fontSize: "13px", color: "#ccc" }}>All spots within {MAX_RADIUS} miles shown</div>
             ) : (
-              <button
-                onClick={loadMore}
-                style={{ background: "white", border: "1.5px solid #534AB7", color: "#534AB7", fontSize: "13px", fontWeight: "600", padding: "10px 24px", borderRadius: "20px", cursor: "pointer" }}
-              >
+              <button onClick={loadMore}
+                style={{ background: "white", border: "1.5px solid #534AB7", color: "#534AB7", fontSize: "13px", fontWeight: "600", padding: "10px 24px", borderRadius: "20px", cursor: "pointer" }}>
                 Load more · expand to {radius + 3} mi
               </button>
             )}
