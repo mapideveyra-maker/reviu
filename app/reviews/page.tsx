@@ -25,51 +25,44 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 }
 
-const PAGE_SIZE = 20
+const PLACES_PER_PAGE = 20
 
 export default function ReviewsPage() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null)
-  const [reviews, setReviews] = useState<any[]>([])
+  const [locationReady, setLocationReady] = useState(false)
+  const [places, setPlaces] = useState<any[]>([])   // grouped: { key, name, href, score, dist, reviews[] }
+  const [shownCount, setShownCount] = useState(PLACES_PER_PAGE)
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
 
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const loadingMoreRef = useRef(false)
-  const hasMoreRef = useRef(true)
-  const offsetRef = useRef(0)
   const locationRef = useRef<{ lat: number; lng: number } | null>(null)
-
-  useEffect(() => { hasMoreRef.current = hasMore }, [hasMore])
   useEffect(() => { locationRef.current = location }, [location])
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
-      pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => setLocation({ lat: 39.1031, lng: -84.5120 })
+      pos => { setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocationReady(true) },
+      () => { setLocation(null); setLocationReady(true) }
     )
   }, [])
 
   useEffect(() => {
-    if (location !== null) loadInitial()
-  }, [location]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (locationReady) load()
+  }, [locationReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // auto-load more when the bottom comes into view
   useEffect(() => {
     const sentinel = sentinelRef.current
     if (!sentinel) return
     const observer = new IntersectionObserver(
-      entries => {
-        if (!entries[0].isIntersecting) return
-        if (loadingMoreRef.current || !hasMoreRef.current) return
-        loadMore()
-      },
-      { rootMargin: "200px", threshold: 0 }
+      entries => { if (entries[0].isIntersecting) setShownCount(prev => prev + PLACES_PER_PAGE) },
+      { rootMargin: "300px", threshold: 0 }
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading])
 
-  async function fetchBatch(from: number) {
+  async function load() {
+    setLoading(true)
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -79,67 +72,59 @@ export default function ReviewsPage() {
       .select("*, businesses(name, latitude, longitude)")
       .eq("status", "published")
       .order("created_at", { ascending: false })
-      .range(from, from + PAGE_SIZE - 1)
-    return data || []
-  }
 
-  function withDistances(batch: any[]) {
+    const all = data || []
     const loc = locationRef.current
-    return batch.map(r => {
-      const biz = r.businesses
-      if (biz?.latitude && biz?.longitude && loc) {
-        return { ...r, _dist: getDistance(loc.lat, loc.lng, parseFloat(biz.latitude), parseFloat(biz.longitude)) }
+
+    // group reviews by place
+    const groups: Record<string, any> = {}
+    for (const r of all) {
+      const key = r.business_id || r.google_place_id || "unknown"
+      if (!groups[key]) {
+        const biz = r.businesses
+        let dist: number | null = null
+        if (biz?.latitude && biz?.longitude && loc) {
+          dist = getDistance(loc.lat, loc.lng, parseFloat(biz.latitude), parseFloat(biz.longitude))
+        }
+        groups[key] = {
+          key,
+          name: biz?.name || "Place",
+          href: r.business_id ? `/business/${r.business_id}` : r.google_place_id ? `/search/${r.google_place_id}` : null,
+          dist,
+          reviews: [],
+        }
       }
-      return { ...r, _dist: null }
-    })
-  }
+      groups[key].reviews.push(r)
+    }
 
-  function sortByDistance(items: any[]) {
-    return [...items].sort((a, b) => {
-      if (a._dist === null && b._dist === null) return 0
-      if (a._dist === null) return 1
-      if (b._dist === null) return -1
-      return a._dist - b._dist
+    // per place: average stars + keep the 3 newest reviews (already newest-first from DB)
+    const list = Object.values(groups).map((g: any) => {
+      const avg = g.reviews.reduce((s: number, r: any) => s + (r.stars || 0), 0) / g.reviews.length
+      return { ...g, score: avg, total: g.reviews.length, reviews: g.reviews.slice(0, 3) }
     })
-  }
 
-  async function loadInitial() {
-    setLoading(true)
-    offsetRef.current = 0
-    const batch = await fetchBatch(0)
-    const processed = sortByDistance(withDistances(batch))
-    setReviews(processed)
-    offsetRef.current = batch.length
-    const more = batch.length === PAGE_SIZE
-    setHasMore(more)
-    hasMoreRef.current = more
+    // closest first; places with no coords go last
+    list.sort((a: any, b: any) => {
+      if (a.dist === null && b.dist === null) return 0
+      if (a.dist === null) return 1
+      if (b.dist === null) return -1
+      return a.dist - b.dist
+    })
+
+    setPlaces(list)
     setLoading(false)
-  }
-
-  async function loadMore() {
-    if (loadingMoreRef.current || !hasMoreRef.current) return
-    loadingMoreRef.current = true
-    setLoadingMore(true)
-    const from = offsetRef.current
-    const batch = await fetchBatch(from)
-    const processed = sortByDistance(withDistances(batch))
-    setReviews(prev => [...prev, ...processed])
-    offsetRef.current = from + batch.length
-    const more = batch.length === PAGE_SIZE
-    setHasMore(more)
-    hasMoreRef.current = more
-    loadingMoreRef.current = false
-    setLoadingMore(false)
   }
 
   if (loading) return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: "32px", marginBottom: "12px" }}>✦</div>
-        <div style={{ color: "#888", fontSize: "14px" }}>Loading reviews near you…</div>
+        <div style={{ color: "#888", fontSize: "14px" }}>Loading reviews…</div>
       </div>
     </div>
   )
+
+  const visible = places.slice(0, shownCount)
 
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
@@ -150,7 +135,7 @@ export default function ReviewsPage() {
       </div>
 
       <div>
-        {reviews.length === 0 && (
+        {places.length === 0 && (
           <div style={{ textAlign: "center", padding: "4rem 1.25rem" }}>
             <div style={{ fontSize: "32px", marginBottom: "12px" }}>◈</div>
             <div style={{ fontSize: "14px", color: "#888", marginBottom: "16px" }}>No reviews yet — be the first!</div>
@@ -160,83 +145,69 @@ export default function ReviewsPage() {
           </div>
         )}
 
-        {reviews.map(review => {
-          const bizName = review.businesses?.name
-          const bizHref = review.business_id
-            ? `/business/${review.business_id}`
-            : review.google_place_id
-            ? `/search/${review.google_place_id}`
-            : null
-          const dist = review._dist
-          const bg = avatarColor(review.reviewer_name || "?")
+        {visible.map(place => (
+          <Link key={place.key} href={place.href || "#"} style={{ textDecoration: "none", display: "block" }}>
+            <div style={{ background: "white", padding: "16px 1.25rem", borderBottom: "1px solid #eee" }}>
 
-          return (
-            <div key={review.id} style={{ background: "white", padding: "16px 1.25rem", borderBottom: "1px solid #eee" }}>
-
-              {/* Reviewer header */}
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <div style={{ width: "42px", height: "42px", borderRadius: "50%", background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", fontWeight: "700", color: "white", flexShrink: 0, letterSpacing: "0.5px" }}>
-                  {review.reviewer_initials || "?"}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#111" }}>
-                    {review.reviewer_name || "Anonymous"}
-                  </div>
-                  <div style={{ fontSize: "11px", color: "#aaa", marginTop: "1px" }}>
-                    {formatDate(review.created_at)}
-                    {dist !== null && dist < 50 && (
-                      <span> · {dist < 0.1 ? "Here" : `${dist.toFixed(1)} mi away`}</span>
-                    )}
+              {/* place header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: "16px", fontWeight: "700", color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{place.name}</div>
+                  <div style={{ fontSize: "11px", color: "#aaa", marginTop: "2px" }}>
+                    {place.dist !== null && (place.dist < 0.1 ? "Here" : `${place.dist.toFixed(1)} mi away`)}
+                    {place.total > 3 && <span> · {place.total} reviews</span>}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: "2px", flexShrink: 0, alignItems: "center" }}>
-                  {[1, 2, 3, 4, 5].map(s => (
-                    <span key={s} style={{ fontSize: "13px", color: s <= review.stars ? "#534AB7" : "#e0e0e0" }}>✦</span>
-                  ))}
+                <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "#EEEDFE", padding: "5px 12px", borderRadius: "20px", flexShrink: 0 }}>
+                  <span style={{ color: "#534AB7", fontSize: "13px" }}>✦</span>
+                  <span style={{ fontSize: "13px", fontWeight: "700", color: "#534AB7" }}>{place.score.toFixed(1)}</span>
                 </div>
               </div>
 
-              {/* Business tag */}
-              {(bizName || review.google_place_id) && (
-                <div style={{ marginBottom: "8px" }}>
-                  {bizHref ? (
-                    <Link href={bizHref} style={{ textDecoration: "none" }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#EEEDFE", color: "#534AB7", fontSize: "11px", fontWeight: "600", padding: "3px 10px", borderRadius: "20px" }}>
-                        📍 {bizName || "View place"}
-                        {review.context_tag && <span style={{ color: "#9990D9", fontWeight: "400" }}> · {review.context_tag}</span>}
-                      </span>
-                    </Link>
-                  ) : (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#EEEDFE", color: "#534AB7", fontSize: "11px", fontWeight: "600", padding: "3px 10px", borderRadius: "20px" }}>
-                      📍 {bizName || "Place"}
-                    </span>
+              {/* 2-3 newest reviews */}
+              {place.reviews.map((review: any) => (
+                <div key={review.id} style={{ paddingTop: "10px", marginTop: "10px", borderTop: "1px solid #f3f3f3" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                    <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: avatarColor(review.reviewer_name || "?"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "700", color: "white", flexShrink: 0 }}>
+                      {review.reviewer_initials || "?"}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "13px", fontWeight: "600", color: "#111" }}>{review.reviewer_name || "Anonymous"}</div>
+                      <div style={{ fontSize: "11px", color: "#aaa" }}>{formatDate(review.created_at)}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: "2px", flexShrink: 0 }}>
+                      {[1, 2, 3, 4, 5].map(s => (
+                        <span key={s} style={{ fontSize: "11px", color: s <= review.stars ? "#534AB7" : "#e0e0e0" }}>✦</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: "13px", color: "#444", lineHeight: "1.6", marginBottom: review.media_urls?.length > 0 ? "10px" : "0" }}>
+                    {review.text?.slice(0, 200)}{review.text?.length > 200 ? "…" : ""}
+                  </div>
+                  {review.media_urls?.length > 0 && (
+                    <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px" }}>
+                      {review.media_urls.slice(0, 5).map((url: string, i: number) => (
+                        <img key={i} src={url} alt="" style={{ width: "80px", height: "80px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
+                      ))}
+                    </div>
                   )}
                 </div>
-              )}
+              ))}
 
-              {/* Review text */}
-              <div style={{ fontSize: "14px", color: "#333", lineHeight: "1.65", marginBottom: review.media_urls?.length > 0 ? "12px" : "0" }}>
-                {review.text?.slice(0, 300)}{review.text?.length > 300 ? "…" : ""}
-              </div>
-
-              {/* Media */}
-              {review.media_urls?.length > 0 && (
-                <div style={{ display: "flex", gap: "6px", overflowX: "auto", marginLeft: "-1.25rem", paddingLeft: "1.25rem", paddingRight: "1.25rem", paddingBottom: "4px" }}>
-                  {review.media_urls.slice(0, 5).map((url: string, i: number) => (
-                    <img key={i} src={url} alt="" style={{ width: "88px", height: "88px", objectFit: "cover", borderRadius: "10px", flexShrink: 0 }} />
-                  ))}
+              {place.total > 3 && (
+                <div style={{ marginTop: "12px", fontSize: "12px", fontWeight: "600", color: "#534AB7" }}>
+                  See all {place.total} reviews →
                 </div>
               )}
             </div>
-          )
-        })}
+          </Link>
+        ))}
 
-        {/* Sentinel — always rendered so observer fires when loading becomes false */}
         <div ref={sentinelRef} style={{ height: "1px" }} />
-        {loadingMore && (
+        {!loading && shownCount < places.length && (
           <div style={{ padding: "20px", textAlign: "center", fontSize: "13px", color: "#aaa" }}>Loading more…</div>
         )}
-        {!hasMore && reviews.length > 0 && !loadingMore && (
+        {!loading && places.length > 0 && shownCount >= places.length && (
           <div style={{ padding: "24px", textAlign: "center", fontSize: "13px", color: "#ccc" }}>All reviews shown</div>
         )}
       </div>
