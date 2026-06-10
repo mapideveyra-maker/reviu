@@ -149,13 +149,13 @@ function PlaceCard({ place }: { place: any }) {
 
 export default function Home() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [locationLabel, setLocationLabel] = useState<string | null>(null)
   const [locationError, setLocationError] = useState(false)
-  const [cityInput, setCityInput] = useState("")
-  const [lookingUpCity, setLookingUpCity] = useState(false)
-  const [cityError, setCityError] = useState("")
   const [activeFilter, setActiveFilter] = useState("food")
   const [search, setSearch] = useState("")
-  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searchResults, setSearchResults] = useState<any[]>([])  // businesses
+  const [cityResults, setCityResults] = useState<any[]>([])       // cities from geocode
+  const [searchTab, setSearchTab] = useState<"all" | "business" | "city">("all")
   const [searching, setSearching] = useState(false)
   const [places, setPlaces] = useState<any[]>([])
   const [reviews, setReviews] = useState<any[]>([])
@@ -188,7 +188,6 @@ export default function Home() {
     initialLoad(location, activeFilter)
   }, [location, activeFilter])
 
-  // auto-load more when bottom comes into view (only on the normal feed, not search)
   useEffect(() => {
     const sentinel = sentinelRef.current
     if (!sentinel) return
@@ -205,30 +204,16 @@ export default function Home() {
     return () => observer.disconnect()
   }, [loading])
 
-  async function lookupCity() {
-    const q = cityInput.trim()
-    if (!q) return
-    setLookingUpCity(true)
-    setCityError("")
-    try {
-      const res = await fetch("/api/places", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q + " city" }),
-      })
-      const data = await res.json()
-      const first = (data.places || [])[0]
-      if (first?.location) {
-        setLocationError(false)
-        setLoading(true)
-        setLocation({ lat: first.location.latitude, lng: first.location.longitude })
-      } else {
-        setCityError("Couldn't find that place. Try another city name.")
-      }
-    } catch {
-      setCityError("Something went wrong. Try again.")
-    }
-    setLookingUpCity(false)
+  // tapping a city re-centers the whole feed there
+  function goToCity(city: any) {
+    if (typeof city.lat !== "number" || typeof city.lng !== "number") return
+    setSearch("")
+    setSearchResults([])
+    setCityResults([])
+    setSearchTab("all")
+    setLocationLabel(city.name || "Selected city")
+    setLoading(true)
+    setLocation({ lat: city.lat, lng: city.lng })
   }
 
   function getFilterTypes(filterKey: string) {
@@ -294,27 +279,39 @@ export default function Home() {
 
   function handleSearch(text: string) {
     setSearch(text)
+    setSearchTab("all")
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
-    if (!text.trim()) { setSearchResults([]); setSearching(false); return }
+    if (!text.trim()) { setSearchResults([]); setCityResults([]); setSearching(false); return }
     setSearching(true)
     searchDebounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch("/api/places", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: text, lat: location?.lat, lng: location?.lng }),
-        })
-        const data = await res.json()
-        setSearchResults((data.places || []).map((p: any) => ({
+        // run business search + city geocode together
+        const [bizRes, cityRes] = await Promise.all([
+          fetch("/api/places", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: text, lat: location?.lat, lng: location?.lng }),
+          }),
+          fetch("/api/geocode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: text }),
+          }),
+        ])
+        const bizData = await bizRes.json()
+        const cityData = await cityRes.json()
+        setSearchResults((bizData.places || []).map((p: any) => ({
           ...p,
           distance: p.location && location ? getDistance(location.lat, location.lng, p.location.latitude, p.location.longitude) : 999,
         })))
-      } catch { setSearchResults([]) }
+        setCityResults(cityData.cities || [])
+      } catch { setSearchResults([]); setCityResults([]) }
       setSearching(false)
     }, 400)
   }
 
   const isSearching = search.trim().length > 0
+  const businessResults = searchResults
 
   const feedItems: any[] = []
   if (!isSearching && location) {
@@ -331,7 +328,6 @@ export default function Home() {
     feedItems.sort((a, b) => a.distance - b.distance)
   }
 
-  // Location denied — app needs location to work
   if (locationError && !location) {
     return (
       <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
@@ -382,7 +378,7 @@ export default function Home() {
           <div>
             <div style={{ fontSize: "22px", fontWeight: "700", color: "white", letterSpacing: "-0.5px" }}>Reviu</div>
             <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)", marginTop: "1px" }}>
-              {isSearching ? "Global search" : `Within ${radius} mi`}
+              {isSearching ? "Search results" : locationLabel ? `Exploring ${locationLabel}` : `Within ${radius} mi`}
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -397,7 +393,7 @@ export default function Home() {
 
         <div style={{ display: "flex", gap: "8px", overflowX: "auto", padding: "12px 1.25rem 0", scrollbarWidth: "none" }}>
           {FILTERS.map(f => (
-            <button key={f.key} onClick={() => { setActiveFilter(f.key); setSearch(""); setSearchResults([]) }}
+            <button key={f.key} onClick={() => { setActiveFilter(f.key); setSearch(""); setSearchResults([]); setCityResults([]) }}
               style={{ flexShrink: 0, padding: "6px 16px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", cursor: "pointer", border: "none", outline: "none",
                 background: activeFilter === f.key && !isSearching ? "white" : "rgba(255,255,255,0.18)",
                 color: activeFilter === f.key && !isSearching ? "#534AB7" : "white" }}>
@@ -407,26 +403,60 @@ export default function Home() {
         </div>
 
         <div style={{ padding: "10px 1.25rem 14px", position: "relative" }}>
-          <span style={{ position: "absolute", left: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "14px", pointerEvents: "none", color: "rgba(255,255,255,0.5)" }}>🔍</span>
+          <span style={{ position: "absolute", left: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "14px", pointerEvents: "none", color: "#999" }}>🔍</span>
           <input type="text" value={search} onChange={e => handleSearch(e.target.value)}
-            placeholder="Search any place worldwide..."
-            style={{ width: "100%", padding: "10px 40px 10px 36px", borderRadius: "12px", border: "none", fontSize: "14px", background: "rgba(255,255,255,0.15)", color: "white", boxSizing: "border-box", outline: "none" }} />
-          {searching && <span style={{ position: "absolute", right: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>Searching…</span>}
+            placeholder="Search a place or city..."
+            style={{ width: "100%", padding: "10px 40px 10px 36px", borderRadius: "12px", border: "none", fontSize: "14px", background: "white", color: "#111", boxSizing: "border-box", outline: "none" }} />
+          {searching && <span style={{ position: "absolute", right: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "11px", color: "#999" }}>Searching…</span>}
           {isSearching && !searching && (
-            <span onClick={() => { setSearch(""); setSearchResults([]) }}
-              style={{ position: "absolute", right: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "18px", color: "rgba(255,255,255,0.6)", cursor: "pointer", lineHeight: 1 }}>✕</span>
+            <span onClick={() => { setSearch(""); setSearchResults([]); setCityResults([]) }}
+              style={{ position: "absolute", right: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "18px", color: "#999", cursor: "pointer", lineHeight: 1 }}>✕</span>
           )}
         </div>
       </div>
 
+      {isSearching && (
+        <div style={{ display: "flex", gap: "8px", padding: "12px 1.25rem", background: "white", borderBottom: "1px solid #eee" }}>
+          {([["all", "All"], ["business", "Business"], ["city", "City"]] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setSearchTab(key)}
+              style={{ padding: "6px 16px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", cursor: "pointer", border: "none",
+                background: searchTab === key ? "#534AB7" : "#f0f0f0",
+                color: searchTab === key ? "white" : "#666" }}>
+              {label}
+              {key === "city" && cityResults.length > 0 && ` (${cityResults.length})`}
+              {key === "business" && businessResults.length > 0 && ` (${businessResults.length})`}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div>
-        {isSearching && !searching && searchResults.length === 0 && (
+        {/* CITY results — show on All and City tabs */}
+        {isSearching && (searchTab === "all" || searchTab === "city") && cityResults.map((city) => (
+          <div key={city.id} onClick={() => goToCity(city)}
+            style={{ display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee", background: "white", cursor: "pointer" }}>
+            <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", flexShrink: 0 }}>🏙️</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "14px", fontWeight: "700", color: "#111" }}>{city.name}</div>
+              <div style={{ fontSize: "12px", color: "#534AB7", fontWeight: "600" }}>Explore this area →</div>
+            </div>
+          </div>
+        ))}
+
+        {/* BUSINESS results — show on All and Business tabs */}
+        {isSearching && (searchTab === "all" || searchTab === "business") && businessResults.map((place) => (
+          <PlaceCard key={place.id} place={place} />
+        ))}
+
+        {isSearching && !searching &&
+          ((searchTab === "city" && cityResults.length === 0) ||
+           (searchTab === "business" && businessResults.length === 0) ||
+           (searchTab === "all" && cityResults.length === 0 && businessResults.length === 0)) && (
           <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
             <div style={{ fontSize: "28px", marginBottom: "8px" }}>🔍</div>
             <div style={{ fontSize: "14px", color: "#888" }}>No results for "{search}"</div>
           </div>
         )}
-        {isSearching && searchResults.map((place) => <PlaceCard key={place.id} place={place} />)}
 
         {!isSearching && feedItems.length === 0 && (
           <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
