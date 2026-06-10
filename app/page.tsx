@@ -300,30 +300,28 @@ export default function Home() {
     feedItems.sort((a, b) => a.distance - b.distance)
   }
 
-  // Location denied and no city chosen yet — ask for a city
+  // Location denied — app needs location to work
   if (locationError && !location) {
     return (
       <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
         <div style={{ fontSize: "40px", marginBottom: "16px" }}>📍</div>
-        <div style={{ fontSize: "20px", fontWeight: "700", color: "#111", marginBottom: "8px", textAlign: "center" }}>Where are you?</div>
+        <div style={{ fontSize: "20px", fontWeight: "700", color: "#111", marginBottom: "8px", textAlign: "center" }}>Location needed</div>
         <div style={{ fontSize: "14px", color: "#888", marginBottom: "24px", textAlign: "center", lineHeight: "1.5" }}>
-          Enter your city so we can show you what's nearby.
+          Reviu needs your location to show what's nearby.<br/><br/>
+          Tap the icon on the left side of your browser's address bar, set Location to Allow, then tap Try again.
         </div>
-        <input
-          type="text"
-          value={cityInput}
-          onChange={e => setCityInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") lookupCity() }}
-          placeholder="e.g. London, Los Angeles, Tokyo"
-          style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #e5e5e5", fontSize: "15px", background: "white", boxSizing: "border-box", marginBottom: "12px", outline: "none" }}
-        />
-        {cityError && <div style={{ fontSize: "13px", color: "#A32D2D", marginBottom: "12px" }}>{cityError}</div>}
         <button
-          onClick={lookupCity}
-          disabled={lookingUpCity || !cityInput.trim()}
-          style={{ width: "100%", background: cityInput.trim() ? "#534AB7" : "#bbb", color: "white", padding: "14px", borderRadius: "12px", fontSize: "15px", fontWeight: "600", border: "none", cursor: cityInput.trim() ? "pointer" : "not-allowed" }}
+          onClick={() => {
+            setLocationError(false)
+            setLoading(true)
+            navigator.geolocation.getCurrentPosition(
+              pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+              () => { setLocationError(true); setLoading(false) }
+            )
+          }}
+          style={{ width: "100%", background: "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "15px", fontWeight: "600", border: "none", cursor: "pointer" }}
         >
-          {lookingUpCity ? "Finding..." : "Show me places"}
+          Try again
         </button>
       </div>
     )
