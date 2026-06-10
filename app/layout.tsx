@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "430px", background: "white", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-around", padding: "12px 0 20px", zIndex: 100 }}>
             <Link href="/" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
               <span style={{ fontSize: "20px" }}>⊞</span>
-              <span style={{ fontSize: "11px", color: "#888" }}>Feed</span>
+              <span style={{ fontSize: "11px", color: "#888" }}>Home</span>
             </Link>
             <Link href="/reviews" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textDecoration: "none" }}>
               <span style={{ fontSize: "20px" }}>◈</span>

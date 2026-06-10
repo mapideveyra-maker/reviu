@@ -166,6 +166,15 @@ export default function Home() {
 
   const seenIdsRef = useRef(new Set<string>())
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const loadingMoreRef = useRef(false)
+  const radiusRef = useRef(3)
+  const locationRef = useRef<{ lat: number; lng: number } | null>(null)
+  const filterRef = useRef("food")
+
+  useEffect(() => { radiusRef.current = radius }, [radius])
+  useEffect(() => { locationRef.current = location }, [location])
+  useEffect(() => { filterRef.current = activeFilter }, [activeFilter])
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -178,6 +187,23 @@ export default function Home() {
     if (!location) return
     initialLoad(location, activeFilter)
   }, [location, activeFilter])
+
+  // auto-load more when bottom comes into view (only on the normal feed, not search)
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      entries => {
+        if (!entries[0].isIntersecting) return
+        if (loadingMoreRef.current) return
+        if (radiusRef.current >= MAX_RADIUS) return
+        loadMore()
+      },
+      { rootMargin: "300px", threshold: 0 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loading])
 
   async function lookupCity() {
     const q = cityInput.trim()
@@ -214,6 +240,7 @@ export default function Home() {
     seenIdsRef.current = new Set()
     setPlaces([])
     setRadius(3)
+    radiusRef.current = 3
 
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
     const types = getFilterTypes(filterKey)
@@ -236,27 +263,31 @@ export default function Home() {
   }
 
   async function loadMore() {
-    if (!location || loadingMore) return
-    const nextRadius = radius + 3
+    const loc = locationRef.current
+    if (!loc || loadingMoreRef.current) return
+    const nextRadius = radiusRef.current + 3
     if (nextRadius > MAX_RADIUS) return
+    loadingMoreRef.current = true
     setLoadingMore(true)
-    const types = getFilterTypes(activeFilter)
+    const types = getFilterTypes(filterRef.current)
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
-    const minRadiusMeters = radius * 1609
+    const minRadiusMeters = radiusRef.current * 1609
     const maxRadiusMeters = nextRadius * 1609
     try {
-      const res = await fetch(`/api/places?lat=${location.lat}&lng=${location.lng}&radius=${maxRadiusMeters}&minRadius=${minRadiusMeters}${typesParam}`)
+      const res = await fetch(`/api/places?lat=${loc.lat}&lng=${loc.lng}&radius=${maxRadiusMeters}&minRadius=${minRadiusMeters}${typesParam}`)
       const data = await res.json()
       const newPlaces = (data.places || [])
         .filter((p: any) => !seenIdsRef.current.has(p.id))
-        .map((p: any) => ({ ...p, distance: p.location ? getDistance(location.lat, location.lng, p.location.latitude, p.location.longitude) : 999 }))
+        .map((p: any) => ({ ...p, distance: p.location ? getDistance(loc.lat, loc.lng, p.location.latitude, p.location.longitude) : 999 }))
         .sort((a: any, b: any) => a.distance - b.distance)
       newPlaces.forEach((p: any) => seenIdsRef.current.add(p.id))
       setPlaces(prev => [...prev, ...newPlaces])
       setRadius(nextRadius)
+      radiusRef.current = nextRadius
     } catch (e) {
       console.error("loadMore error", e)
     } finally {
+      loadingMoreRef.current = false
       setLoadingMore(false)
     }
   }
@@ -448,18 +479,16 @@ export default function Home() {
         })}
 
         {!isSearching && (
-          <div style={{ padding: "20px 1.25rem", textAlign: "center" }}>
-            {loadingMore ? (
-              <div style={{ fontSize: "13px", color: "#aaa" }}>Loading…</div>
-            ) : radius >= MAX_RADIUS ? (
-              <div style={{ fontSize: "13px", color: "#ccc" }}>All spots within {MAX_RADIUS} miles shown</div>
-            ) : (
-              <button onClick={loadMore}
-                style={{ background: "white", border: "1.5px solid #534AB7", color: "#534AB7", fontSize: "13px", fontWeight: "600", padding: "10px 24px", borderRadius: "20px", cursor: "pointer" }}>
-                Load more · expand to {radius + 3} mi
-              </button>
-            )}
-          </div>
+          <>
+            <div ref={sentinelRef} style={{ height: "1px" }} />
+            <div style={{ padding: "20px 1.25rem", textAlign: "center" }}>
+              {loadingMore ? (
+                <div style={{ fontSize: "13px", color: "#aaa" }}>Loading…</div>
+              ) : radius >= MAX_RADIUS ? (
+                <div style={{ fontSize: "13px", color: "#ccc" }}>All spots within {MAX_RADIUS} miles shown</div>
+              ) : null}
+            </div>
+          </>
         )}
       </div>
     </div>
