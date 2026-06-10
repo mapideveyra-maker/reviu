@@ -118,13 +118,13 @@ const FILTERS = [
 
 const MAX_RADIUS = 30
 
-function PlaceCard({ place }: { place: any }) {
+function PlaceCard({ place, onNav }: { place: any; onNav: () => void }) {
   const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
   const category = getCategoryFromTypes(place.types || [])
   const isOpen = place.currentOpeningHours?.openNow
   const dist = place.distance
   return (
-    <Link href={`/search/${place.id}`} style={{ textDecoration: "none", display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee", background: "white" }}>
+    <Link href={`/search/${place.id}`} onClick={onNav} style={{ textDecoration: "none", display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee", background: "white" }}>
       <div style={{ width: "64px", height: "64px", borderRadius: "14px", overflow: "hidden", flexShrink: 0, background: "#f0f0f0" }}>
         <img src={photo} alt={place.displayName?.text} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       </div>
@@ -153,8 +153,8 @@ export default function Home() {
   const [locationError, setLocationError] = useState(false)
   const [activeFilter, setActiveFilter] = useState("food")
   const [search, setSearch] = useState("")
-  const [searchResults, setSearchResults] = useState<any[]>([])  // businesses
-  const [cityResults, setCityResults] = useState<any[]>([])       // cities from geocode
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [cityResults, setCityResults] = useState<any[]>([])
   const [searchTab, setSearchTab] = useState<"all" | "business" | "city">("all")
   const [searching, setSearching] = useState(false)
   const [places, setPlaces] = useState<any[]>([])
@@ -163,6 +163,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [searchFocused, setSearchFocused] = useState(false)
 
   const seenIdsRef = useRef(new Set<string>())
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -171,12 +173,35 @@ export default function Home() {
   const radiusRef = useRef(3)
   const locationRef = useRef<{ lat: number; lng: number } | null>(null)
   const filterRef = useRef("food")
+  const restoreScrollRef = useRef<number | null>(null)
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("reviu_recent")
+      if (saved) setRecentSearches(JSON.parse(saved))
+    } catch {}
+  }, [])
   useEffect(() => { radiusRef.current = radius }, [radius])
   useEffect(() => { locationRef.current = location }, [location])
   useEffect(() => { filterRef.current = activeFilter }, [activeFilter])
 
+  // On mount: if URL has a city, use it; else use geolocation
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const clat = parseFloat(params.get("clat") || "")
+    const clng = parseFloat(params.get("clng") || "")
+    const cname = params.get("cname")
+
+    // pull any saved scroll position for this city view
+    const savedScroll = sessionStorage.getItem("reviu_scroll")
+    if (savedScroll) restoreScrollRef.current = parseInt(savedScroll, 10)
+
+    if (!isNaN(clat) && !isNaN(clng)) {
+      setLocationLabel(cname ? decodeURIComponent(cname) : "Selected city")
+      setLocation({ lat: clat, lng: clng })
+      return
+    }
+
     navigator.geolocation.getCurrentPosition(
       pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       () => { setLocationError(true); setLoading(false) }
@@ -187,6 +212,17 @@ export default function Home() {
     if (!location) return
     initialLoad(location, activeFilter)
   }, [location, activeFilter])
+
+  // after content loads, restore scroll if we have one saved
+  useEffect(() => {
+    if (loading) return
+    if (restoreScrollRef.current != null) {
+      const y = restoreScrollRef.current
+      restoreScrollRef.current = null
+      sessionStorage.removeItem("reviu_scroll")
+      requestAnimationFrame(() => window.scrollTo(0, y))
+    }
+  }, [loading])
 
   useEffect(() => {
     const sentinel = sentinelRef.current
@@ -204,7 +240,7 @@ export default function Home() {
     return () => observer.disconnect()
   }, [loading])
 
-  // tapping a city re-centers the whole feed there
+  // tapping a city re-centers the feed AND writes it to the URL so back button restores it
   function goToCity(city: any) {
     if (typeof city.lat !== "number" || typeof city.lng !== "number") return
     setSearch("")
@@ -213,7 +249,14 @@ export default function Home() {
     setSearchTab("all")
     setLocationLabel(city.name || "Selected city")
     setLoading(true)
+    const url = `/?clat=${city.lat}&clng=${city.lng}&cname=${encodeURIComponent(city.name || "")}`
+    window.history.pushState({}, "", url)
     setLocation({ lat: city.lat, lng: city.lng })
+  }
+
+  // save scroll position before navigating into a business
+  function saveScroll() {
+    sessionStorage.setItem("reviu_scroll", String(window.scrollY))
   }
 
   function getFilterTypes(filterKey: string) {
@@ -284,8 +327,15 @@ export default function Home() {
     if (!text.trim()) { setSearchResults([]); setCityResults([]); setSearching(false); return }
     setSearching(true)
     searchDebounceRef.current = setTimeout(async () => {
+      const term = text.trim()
+      if (term.length > 1) {
+        setRecentSearches(prev => {
+          const next = [term, ...prev.filter(s => s.toLowerCase() !== term.toLowerCase())].slice(0, 5)
+          try { localStorage.setItem("reviu_recent", JSON.stringify(next)) } catch {}
+          return next
+        })
+      }
       try {
-        // run business search + city geocode together
         const [bizRes, cityRes] = await Promise.all([
           fetch("/api/places", {
             method: "POST",
@@ -391,6 +441,24 @@ export default function Home() {
           </div>
         </div>
 
+        {locationLabel && !isSearching && (
+          <div style={{ padding: "8px 1.25rem 0" }}>
+            <button
+              onClick={() => {
+                window.history.pushState({}, "", "/")
+                setLocationLabel(null)
+                setLoading(true)
+                navigator.geolocation.getCurrentPosition(
+                  pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                  () => { setLocationError(true); setLoading(false) }
+                )
+              }}
+              style={{ background: "rgba(255,255,255,0.2)", color: "white", fontSize: "12px", fontWeight: "600", padding: "5px 12px", borderRadius: "20px", border: "none", cursor: "pointer" }}>
+              ← Back to my location
+            </button>
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: "8px", overflowX: "auto", padding: "12px 1.25rem 0", scrollbarWidth: "none" }}>
           {FILTERS.map(f => (
             <button key={f.key} onClick={() => { setActiveFilter(f.key); setSearch(""); setSearchResults([]); setCityResults([]) }}
@@ -405,6 +473,8 @@ export default function Home() {
         <div style={{ padding: "10px 1.25rem 14px", position: "relative" }}>
           <span style={{ position: "absolute", left: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "14px", pointerEvents: "none", color: "#999" }}>🔍</span>
           <input type="text" value={search} onChange={e => handleSearch(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
             placeholder="Search a place or city..."
             style={{ width: "100%", padding: "10px 40px 10px 36px", borderRadius: "12px", border: "none", fontSize: "14px", background: "white", color: "#111", boxSizing: "border-box", outline: "none" }} />
           {searching && <span style={{ position: "absolute", right: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "11px", color: "#999" }}>Searching…</span>}
@@ -413,6 +483,20 @@ export default function Home() {
               style={{ position: "absolute", right: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "18px", color: "#999", cursor: "pointer", lineHeight: 1 }}>✕</span>
           )}
         </div>
+
+        {searchFocused && !isSearching && recentSearches.length > 0 && (
+          <div style={{ padding: "0 1.25rem 14px" }}>
+            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)", marginBottom: "8px" }}>Recent</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {recentSearches.map(term => (
+                <span key={term} onMouseDown={() => handleSearch(term)}
+                  style={{ background: "rgba(255,255,255,0.18)", color: "white", fontSize: "13px", padding: "6px 14px", borderRadius: "20px", cursor: "pointer" }}>
+                  {term}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {isSearching && (
@@ -431,7 +515,6 @@ export default function Home() {
       )}
 
       <div>
-        {/* CITY results — show on All and City tabs */}
         {isSearching && (searchTab === "all" || searchTab === "city") && cityResults.map((city) => (
           <div key={city.id} onClick={() => goToCity(city)}
             style={{ display: "flex", gap: "14px", alignItems: "center", padding: "14px 1.25rem", borderBottom: "1px solid #eee", background: "white", cursor: "pointer" }}>
@@ -443,9 +526,8 @@ export default function Home() {
           </div>
         ))}
 
-        {/* BUSINESS results — show on All and Business tabs */}
         {isSearching && (searchTab === "all" || searchTab === "business") && businessResults.map((place) => (
-          <PlaceCard key={place.id} place={place} />
+          <PlaceCard key={place.id} place={place} onNav={saveScroll} />
         ))}
 
         {isSearching && !searching &&
@@ -477,7 +559,7 @@ export default function Home() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: "13px", fontWeight: "600", color: "#111" }}>{review.reviewer_name}</div>
                     <div style={{ fontSize: "11px", color: "#888" }}>
-                      reviewed <Link href={`/business/${review.business_id}`} style={{ color: "#534AB7", textDecoration: "none", fontWeight: "600" }}>{review.businesses?.name}</Link>
+                      reviewed <Link href={`/business/${review.business_id}`} onClick={saveScroll} style={{ color: "#534AB7", textDecoration: "none", fontWeight: "600" }}>{review.businesses?.name}</Link>
                       {" · "}{new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </div>
                   </div>
@@ -502,7 +584,7 @@ export default function Home() {
           }
 
           if (item.type === "google_place") {
-            return <PlaceCard key={`place-${item.place.id}`} place={item.place} />
+            return <PlaceCard key={`place-${item.place.id}`} place={item.place} onNav={saveScroll} />
           }
 
           return null
