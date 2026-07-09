@@ -2,7 +2,6 @@
 import Link from "next/link"
 import { useState, useEffect, useRef } from "react"
 import { createClient } from "@supabase/supabase-js"
-
 function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 3958.8
   const dLat = (lat2 - lat1) * Math.PI / 180
@@ -12,11 +11,9 @@ function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
     Math.sin(dLng / 2) * Math.sin(dLng / 2)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
-
 function getPhotoUrl(photoName: string) {
   return `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&key=${process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY}`
 }
-
 function getCategoryFromTypes(types: string[]) {
   if (types.includes("fine_dining_restaurant")) return "Fine Dining"
   if (types.includes("italian_restaurant")) return "Italian"
@@ -77,7 +74,6 @@ function getCategoryFromTypes(types: string[]) {
   if (types.includes("store")) return "Shop"
   return "Place"
 }
-
 const FILTERS = [
   {
     key: "food",
@@ -115,10 +111,10 @@ const FILTERS = [
   },
   { key: "all", label: "All", types: [] },
 ]
-
+const INITIAL_RADIUS = 3
+const RADIUS_STEP = 3
 const MAX_RADIUS = 30
-
-function PlaceCard({ place, onNav }: { place: any; onNav: () => void }) {
+function PlaceCard({ place, onNav }: { place: any; onNav?: () => void }) {
   const photo = place.photos?.[0] ? getPhotoUrl(place.photos[0].name) : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
   const category = getCategoryFromTypes(place.types || [])
   const isOpen = place.currentOpeningHours?.openNow
@@ -146,7 +142,6 @@ function PlaceCard({ place, onNav }: { place: any; onNav: () => void }) {
     </Link>
   )
 }
-
 export default function Home() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [locationLabel, setLocationLabel] = useState<string | null>(null)
@@ -159,71 +154,47 @@ export default function Home() {
   const [searching, setSearching] = useState(false)
   const [places, setPlaces] = useState<any[]>([])
   const [reviews, setReviews] = useState<any[]>([])
-  const [radius, setRadius] = useState(3)
+  const [radius, setRadius] = useState(INITIAL_RADIUS)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [searchFocused, setSearchFocused] = useState(false)
-
   const seenIdsRef = useRef(new Set<string>())
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const sentinelRef = useRef<HTMLDivElement>(null)
   const loadingMoreRef = useRef(false)
-  const radiusRef = useRef(3)
+  const radiusRef = useRef(INITIAL_RADIUS)
   const locationRef = useRef<{ lat: number; lng: number } | null>(null)
   const filterRef = useRef("food")
-  const restoreScrollRef = useRef<number | null>(null)
-
+  const sentinelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     try {
       const saved = localStorage.getItem("reviu_recent")
       if (saved) setRecentSearches(JSON.parse(saved))
     } catch {}
   }, [])
-  useEffect(() => { radiusRef.current = radius }, [radius])
   useEffect(() => { locationRef.current = location }, [location])
   useEffect(() => { filterRef.current = activeFilter }, [activeFilter])
-
-  // On mount: if URL has a city, use it; else use geolocation
+  useEffect(() => { radiusRef.current = radius }, [radius])
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const clat = parseFloat(params.get("clat") || "")
     const clng = parseFloat(params.get("clng") || "")
     const cname = params.get("cname")
-
-    // pull any saved scroll position for this city view
-    const savedScroll = sessionStorage.getItem("reviu_scroll")
-    if (savedScroll) restoreScrollRef.current = parseInt(savedScroll, 10)
-
     if (!isNaN(clat) && !isNaN(clng)) {
       setLocationLabel(cname ? decodeURIComponent(cname) : "Selected city")
       setLocation({ lat: clat, lng: clng })
       return
     }
-
     navigator.geolocation.getCurrentPosition(
       pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       () => { setLocationError(true); setLoading(false) }
     )
   }, [])
-
   useEffect(() => {
     if (!location) return
     initialLoad(location, activeFilter)
   }, [location, activeFilter])
-
-  // after content loads, restore scroll if we have one saved
-  useEffect(() => {
-    if (loading) return
-    if (restoreScrollRef.current != null) {
-      const y = restoreScrollRef.current
-      restoreScrollRef.current = null
-      sessionStorage.removeItem("reviu_scroll")
-      requestAnimationFrame(() => window.scrollTo(0, y))
-    }
-  }, [loading])
-
   useEffect(() => {
     const sentinel = sentinelRef.current
     if (!sentinel) return
@@ -234,72 +205,47 @@ export default function Home() {
         if (radiusRef.current >= MAX_RADIUS) return
         loadMore()
       },
-      { rootMargin: "300px", threshold: 0 }
+      { rootMargin: "400px", threshold: 0 }
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
   }, [loading])
-
-  // tapping a city re-centers the feed AND writes it to the URL so back button restores it
-  function goToCity(city: any) {
-    if (typeof city.lat !== "number" || typeof city.lng !== "number") return
-    setSearch("")
-    setSearchResults([])
-    setCityResults([])
-    setSearchTab("all")
-    setLocationLabel(city.name || "Selected city")
-    setLoading(true)
-    const url = `/?clat=${city.lat}&clng=${city.lng}&cname=${encodeURIComponent(city.name || "")}`
-    window.history.pushState({}, "", url)
-    setLocation({ lat: city.lat, lng: city.lng })
-  }
-
-  // save scroll position before navigating into a business
-  function saveScroll() {
-    sessionStorage.setItem("reviu_scroll", String(window.scrollY))
-  }
-
   function getFilterTypes(filterKey: string) {
     return FILTERS.find(f => f.key === filterKey)?.types ?? []
   }
-
   async function initialLoad(loc: { lat: number; lng: number }, filterKey: string) {
     setLoading(true)
     seenIdsRef.current = new Set()
     setPlaces([])
-    setRadius(3)
-    radiusRef.current = 3
-
+    setRadius(INITIAL_RADIUS)
+    radiusRef.current = INITIAL_RADIUS
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
     const types = getFilterTypes(filterKey)
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
-
     const [placesRes, reviewRes] = await Promise.all([
-      fetch(`/api/places?lat=${loc.lat}&lng=${loc.lng}&radius=${3 * 1609}${typesParam}`),
+      fetch(`/api/places?lat=${loc.lat}&lng=${loc.lng}&radius=${INITIAL_RADIUS * 1609}${typesParam}`),
       supabase.from("reviews").select("*, businesses(name, category, cover_url, latitude, longitude)").eq("status", "published").order("created_at", { ascending: false }).limit(30),
     ])
-
     const placesData = await placesRes.json()
     const loaded = (placesData.places || [])
       .map((p: any) => ({ ...p, distance: p.location ? getDistance(loc.lat, loc.lng, p.location.latitude, p.location.longitude) : 999 }))
       .sort((a: any, b: any) => a.distance - b.distance)
-
     loaded.forEach((p: any) => seenIdsRef.current.add(p.id))
     setPlaces(loaded)
     setReviews(reviewRes.data || [])
     setLoading(false)
   }
-
   async function loadMore() {
     const loc = locationRef.current
     if (!loc || loadingMoreRef.current) return
-    const nextRadius = radiusRef.current + 3
+    const currentRadius = radiusRef.current
+    const nextRadius = currentRadius + RADIUS_STEP
     if (nextRadius > MAX_RADIUS) return
     loadingMoreRef.current = true
     setLoadingMore(true)
     const types = getFilterTypes(filterRef.current)
     const typesParam = types.length > 0 ? `&types=${types.join(",")}` : ""
-    const minRadiusMeters = radiusRef.current * 1609
+    const minRadiusMeters = currentRadius * 1609
     const maxRadiusMeters = nextRadius * 1609
     try {
       const res = await fetch(`/api/places?lat=${loc.lat}&lng=${loc.lng}&radius=${maxRadiusMeters}&minRadius=${minRadiusMeters}${typesParam}`)
@@ -319,7 +265,21 @@ export default function Home() {
       setLoadingMore(false)
     }
   }
-
+  function goToCity(city: any) {
+    if (typeof city.lat !== "number" || typeof city.lng !== "number") return
+    setSearch("")
+    setSearchResults([])
+    setCityResults([])
+    setSearchTab("all")
+    setLocationLabel(city.name || "Selected city")
+    setLoading(true)
+    const url = `/?clat=${city.lat}&clng=${city.lng}&cname=${encodeURIComponent(city.name || "")}`
+    window.history.pushState({}, "", url)
+    setLocation({ lat: city.lat, lng: city.lng })
+  }
+  function saveScroll() {
+    sessionStorage.setItem("reviu_scroll", String(window.scrollY))
+  }
   function handleSearch(text: string) {
     setSearch(text)
     setSearchTab("all")
@@ -359,10 +319,7 @@ export default function Home() {
       setSearching(false)
     }, 400)
   }
-
   const isSearching = search.trim().length > 0
-  const businessResults = searchResults
-
   const feedItems: any[] = []
   if (!isSearching && location) {
     reviews.forEach((review: any) => {
@@ -370,40 +327,33 @@ export default function Home() {
       let dist = 999
       if (biz?.latitude && biz?.longitude) {
         dist = getDistance(location.lat, location.lng, parseFloat(biz.latitude), parseFloat(biz.longitude))
-        if (dist > radius) return
       }
       feedItems.push({ type: "review", review, distance: dist })
     })
     places.forEach((place: any) => feedItems.push({ type: "google_place", place, distance: place.distance }))
     feedItems.sort((a, b) => a.distance - b.distance)
   }
-
   if (locationError && !location) {
     return (
       <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
         <div style={{ fontSize: "40px", marginBottom: "16px" }}>📍</div>
         <div style={{ fontSize: "20px", fontWeight: "700", color: "#111", marginBottom: "8px", textAlign: "center" }}>Location needed</div>
         <div style={{ fontSize: "14px", color: "#888", marginBottom: "24px", textAlign: "center", lineHeight: "1.5" }}>
-          Reviu needs your location to show what's nearby.<br/><br/>
-          Tap the icon on the left side of your browser's address bar, set Location to Allow, then tap Try again.
+          Reviu needs your location to show what's nearby. Allow location access in your browser then tap Try again.
         </div>
-        <button
-          onClick={() => {
-            setLocationError(false)
-            setLoading(true)
-            navigator.geolocation.getCurrentPosition(
-              pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-              () => { setLocationError(true); setLoading(false) }
-            )
-          }}
-          style={{ width: "100%", background: "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "15px", fontWeight: "600", border: "none", cursor: "pointer" }}
-        >
+        <button onClick={() => {
+          setLocationError(false)
+          setLoading(true)
+          navigator.geolocation.getCurrentPosition(
+            pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () => { setLocationError(true); setLoading(false) }
+          )
+        }} style={{ width: "100%", background: "#534AB7", color: "white", padding: "14px", borderRadius: "12px", fontSize: "15px", fontWeight: "600", border: "none", cursor: "pointer" }}>
           Try again
         </button>
       </div>
     )
   }
-
   if (loading) return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ textAlign: "center" }}>
@@ -412,23 +362,20 @@ export default function Home() {
       </div>
     </div>
   )
-
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "430px", margin: "0 auto", minHeight: "100vh", background: "#f7f7f5", paddingBottom: "80px" }}>
-
       {selectedPhoto && (
         <div onClick={() => setSelectedPhoto(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.95)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
           <div style={{ position: "absolute", top: "16px", right: "16px", color: "white", fontSize: "28px", cursor: "pointer" }}>✕</div>
           <img src={selectedPhoto} alt="" style={{ maxWidth: "100%", maxHeight: "90vh", borderRadius: "12px", objectFit: "contain" }} onClick={e => e.stopPropagation()} />
         </div>
       )}
-
       <div style={{ background: "#534AB7" }}>
         <div style={{ padding: "1rem 1.25rem 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: "22px", fontWeight: "700", color: "white", letterSpacing: "-0.5px" }}>Reviu</div>
             <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)", marginTop: "1px" }}>
-              {isSearching ? "Search results" : locationLabel ? `Exploring ${locationLabel}` : `Within ${radius} mi`}
+              {isSearching ? "Search results" : locationLabel ? `Exploring ${locationLabel}` : `Within ${radius} mi of you`}
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -440,25 +387,21 @@ export default function Home() {
             </Link>
           </div>
         </div>
-
         {locationLabel && !isSearching && (
           <div style={{ padding: "8px 1.25rem 0" }}>
-            <button
-              onClick={() => {
-                window.history.pushState({}, "", "/")
-                setLocationLabel(null)
-                setLoading(true)
-                navigator.geolocation.getCurrentPosition(
-                  pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                  () => { setLocationError(true); setLoading(false) }
-                )
-              }}
-              style={{ background: "rgba(255,255,255,0.2)", color: "white", fontSize: "12px", fontWeight: "600", padding: "5px 12px", borderRadius: "20px", border: "none", cursor: "pointer" }}>
+            <button onClick={() => {
+              window.history.pushState({}, "", "/")
+              setLocationLabel(null)
+              setLoading(true)
+              navigator.geolocation.getCurrentPosition(
+                pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                () => { setLocationError(true); setLoading(false) }
+              )
+            }} style={{ background: "rgba(255,255,255,0.2)", color: "white", fontSize: "12px", fontWeight: "600", padding: "5px 12px", borderRadius: "20px", border: "none", cursor: "pointer" }}>
               ← Back to my location
             </button>
           </div>
         )}
-
         <div style={{ display: "flex", gap: "8px", overflowX: "auto", padding: "12px 1.25rem 0", scrollbarWidth: "none" }}>
           {FILTERS.map(f => (
             <button key={f.key} onClick={() => { setActiveFilter(f.key); setSearch(""); setSearchResults([]); setCityResults([]) }}
@@ -469,7 +412,6 @@ export default function Home() {
             </button>
           ))}
         </div>
-
         <div style={{ padding: "10px 1.25rem 14px", position: "relative" }}>
           <span style={{ position: "absolute", left: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "14px", pointerEvents: "none", color: "#999" }}>🔍</span>
           <input type="text" value={search} onChange={e => handleSearch(e.target.value)}
@@ -483,7 +425,6 @@ export default function Home() {
               style={{ position: "absolute", right: "calc(1.25rem + 12px)", top: "50%", transform: "translateY(-50%)", fontSize: "18px", color: "#999", cursor: "pointer", lineHeight: 1 }}>✕</span>
           )}
         </div>
-
         {searchFocused && !isSearching && recentSearches.length > 0 && (
           <div style={{ padding: "0 1.25rem 14px" }}>
             <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)", marginBottom: "8px" }}>Recent</div>
@@ -498,7 +439,6 @@ export default function Home() {
           </div>
         )}
       </div>
-
       {isSearching && (
         <div style={{ display: "flex", gap: "8px", padding: "12px 1.25rem", background: "white", borderBottom: "1px solid #eee" }}>
           {([["all", "All"], ["business", "Business"], ["city", "City"]] as const).map(([key, label]) => (
@@ -508,12 +448,11 @@ export default function Home() {
                 color: searchTab === key ? "white" : "#666" }}>
               {label}
               {key === "city" && cityResults.length > 0 && ` (${cityResults.length})`}
-              {key === "business" && businessResults.length > 0 && ` (${businessResults.length})`}
+              {key === "business" && searchResults.length > 0 && ` (${searchResults.length})`}
             </button>
           ))}
         </div>
       )}
-
       <div>
         {isSearching && (searchTab === "all" || searchTab === "city") && cityResults.map((city) => (
           <div key={city.id} onClick={() => goToCity(city)}
@@ -525,28 +464,24 @@ export default function Home() {
             </div>
           </div>
         ))}
-
-        {isSearching && (searchTab === "all" || searchTab === "business") && businessResults.map((place) => (
+        {isSearching && (searchTab === "all" || searchTab === "business") && searchResults.map((place) => (
           <PlaceCard key={place.id} place={place} onNav={saveScroll} />
         ))}
-
         {isSearching && !searching &&
           ((searchTab === "city" && cityResults.length === 0) ||
-           (searchTab === "business" && businessResults.length === 0) ||
-           (searchTab === "all" && cityResults.length === 0 && businessResults.length === 0)) && (
+           (searchTab === "business" && searchResults.length === 0) ||
+           (searchTab === "all" && cityResults.length === 0 && searchResults.length === 0)) && (
           <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
             <div style={{ fontSize: "28px", marginBottom: "8px" }}>🔍</div>
             <div style={{ fontSize: "14px", color: "#888" }}>No results for "{search}"</div>
           </div>
         )}
-
         {!isSearching && feedItems.length === 0 && (
           <div style={{ textAlign: "center", padding: "3rem 1.25rem" }}>
             <div style={{ fontSize: "28px", marginBottom: "8px" }}>📍</div>
             <div style={{ fontSize: "14px", color: "#888" }}>Nothing nearby yet</div>
           </div>
         )}
-
         {!isSearching && feedItems.map((item) => {
           if (item.type === "review") {
             const review = item.review
@@ -582,22 +517,19 @@ export default function Home() {
               </div>
             )
           }
-
           if (item.type === "google_place") {
             return <PlaceCard key={`place-${item.place.id}`} place={item.place} onNav={saveScroll} />
           }
-
           return null
         })}
-
         {!isSearching && (
           <>
             <div ref={sentinelRef} style={{ height: "1px" }} />
             <div style={{ padding: "20px 1.25rem", textAlign: "center" }}>
               {loadingMore ? (
-                <div style={{ fontSize: "13px", color: "#aaa" }}>Loading…</div>
+                <div style={{ fontSize: "13px", color: "#aaa" }}>Finding more nearby…</div>
               ) : radius >= MAX_RADIUS ? (
-                <div style={{ fontSize: "13px", color: "#ccc" }}>All spots within {MAX_RADIUS} miles shown</div>
+                <div style={{ fontSize: "13px", color: "#ccc" }}>That's everything nearby</div>
               ) : null}
             </div>
           </>

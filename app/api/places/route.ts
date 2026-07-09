@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server"
+﻿import { NextResponse } from "next/server"
 
 const FIELD_MASK =
   "places.id,places.displayName,places.formattedAddress,places.location," +
   "places.rating,places.userRatingCount,places.types,places.photos," +
   "places.currentOpeningHours,places.priceLevel,places.businessStatus"
 
-const CHUNK_SIZE = 7
+const CHUNK_SIZE = 1
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
   const out: T[][] = []
@@ -66,6 +66,22 @@ function dedup(batches: any[][]): any[] {
   return out
 }
 
+function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function closest20(places: any[], lat: number, lng: number): any[] {
+  return places
+    .map(p => ({ ...p, _dist: p.location ? distanceMeters(lat, lng, p.location.latitude, p.location.longitude) : Infinity }))
+    .sort((a, b) => a._dist - b._dist)
+    .slice(0, 20)
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const lat = parseFloat(searchParams.get("lat")!)
@@ -76,7 +92,6 @@ export async function GET(request: Request) {
   const includedTypes = typesParam ? typesParam.split(",").filter(Boolean) : []
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY!
 
-  // One chunk per type group; empty array = one call with no type filter (All)
   const chunks: string[][] = includedTypes.length > CHUNK_SIZE
     ? chunkArray(includedTypes, CHUNK_SIZE)
     : [includedTypes]
@@ -85,23 +100,18 @@ export async function GET(request: Request) {
     let batches: any[][]
 
     if (minRadius > 0) {
-      // Ring search: Google always returns the N closest places from a center point,
-      // so searching from the user's location at a larger radius just re-returns the
-      // same close places. Fix: place 4 search centers on the ring midpoint boundary
-      // (N/S/E/W). Each center is in the ring, so its closest results are too.
       const midMeters = (minRadius + radius) / 2
       const halfMeters = (radius - minRadius) / 2
       const latOff = midMeters / 111320
       const lngOff = midMeters / (111320 * Math.cos(lat * Math.PI / 180))
 
       const centers: [number, number][] = [
-        [lat + latOff, lng],          // N
-        [lat - latOff, lng],          // S
-        [lat, lng + lngOff],          // E
-        [lat, lng - lngOff],          // W
+        [lat + latOff, lng],
+        [lat - latOff, lng],
+        [lat, lng + lngOff],
+        [lat, lng - lngOff],
       ]
 
-      // All center × chunk combinations fire in parallel
       const calls = centers.flatMap(([cLat, cLng]) =>
         chunks.map(chunk => nearbySearch(cLat, cLng, halfMeters, chunk, apiKey))
       )
@@ -110,7 +120,6 @@ export async function GET(request: Request) {
         .filter((r): r is PromiseFulfilledResult<any[]> => r.status === "fulfilled")
         .map(r => r.value)
     } else {
-      // Initial load: standard search from user's location
       const settled = await Promise.allSettled(
         chunks.map(chunk => nearbySearch(lat, lng, radius, chunk, apiKey))
       )
@@ -120,7 +129,8 @@ export async function GET(request: Request) {
     }
 
     const deduped = dedup(batches)
-    const places = qualityFilter(deduped)
+    const places = closest20(qualityFilter(deduped), lat, lng)
+
     console.log(
       `[places GET] minRadius=${minRadius}m radius=${radius}m ` +
       `types=${includedTypes.length} chunks=${chunks.length} ` +
